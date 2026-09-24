@@ -175,7 +175,7 @@ def whatsapp_qr(lang: str = "fr"):
 
 PROFILE_ABOUT = "Mémoire collective UniPod 🧠 — posez vos questions (FR/EN)"
 PROFILE_DESCRIPTION = ("UniPods Memory répond aux questions de la communauté UniPod à partir des messages, réunions et "
-                       "documents, en citant ses sources. Conçu par Ing. Souleymane Mahamat Saleh (Tchad). "
+                       "documents, en citant ses sources. "
                        "Envoyez « aide » pour commencer.")
 
 

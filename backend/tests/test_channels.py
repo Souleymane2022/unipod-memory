@@ -250,4 +250,4 @@ def test_whatsapp_setup_profile(client, monkeypatch):
     profile = calls[2]
     assert profile["url"].endswith("/1234567890/whatsapp_business_profile")
     assert profile["json"]["profile_picture_handle"] == "2::aW1hZ2UvanBlZw"
-    assert len(profile["json"]["about"]) <= 139 and "Souleymane" in profile["json"]["description"]
+    assert len(profile["json"]["about"]) <= 139 and "UniPods Memory" in profile["json"]["description"]

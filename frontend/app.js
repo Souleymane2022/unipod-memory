@@ -10,7 +10,7 @@ const I18N = {
     wa_text: "Posez vos questions directement depuis WhatsApp : scannez le QR code ou appuyez sur le bouton, puis envoyez « aide ».",
     wa_button: "Ouvrir WhatsApp",
     wa_note: "Démo : numéro de test Meta, seuls les numéros autorisés reçoivent une réponse.",
-    credit: "Conçu par Ing. Souleymane Mahamat Saleh 🇹🇩 · Hackathon UniPod",
+    credit: "UniPods Memory · Hackathon UniPod",
     welcome: "Bonjour ! Posez-moi une question sur ce qui s'est dit dans le groupe, en réunion ou dans les documents. Je réponds uniquement à partir des sources indexées et je les cite. Vous pouvez écrire en français ou en anglais.",
     examples: [
       "Quelle est la date limite de dépôt des projets pour le hackathon ?",
@@ -55,7 +55,7 @@ const I18N = {
     wa_text: "Ask your questions straight from WhatsApp: scan the QR code or tap the button, then send \"help\".",
     wa_button: "Open WhatsApp",
     wa_note: "Demo: Meta test number, only authorised numbers receive a reply.",
-    credit: "Designed by Eng. Souleymane Mahamat Saleh 🇹🇩 · UniPod Hackathon",
+    credit: "UniPods Memory · UniPod Hackathon",
     welcome: "Hello! Ask me anything about what was said in the group, in meetings or in documents. I only answer from the indexed sources and I cite them. You can write in English or French.",
     examples: [
       "What is the deadline to submit hackathon projects?",
