@@ -28,6 +28,9 @@ MESSAGES = {
                     "les réunions ou les documents, par exemple : « Quand a lieu la prochaine réunion ? »",
         "thanks": "Avec plaisir ! N'hésitez pas si vous avez une autre question.",
         "doc_summary_intro": "Voici ce que contient le document « {source} » :",
+        "creator": "C'est Ing. Souleymane Mahamat Saleh, le Tchadien ! 🇹🇩\n"
+                   "Il m'a conçu pour être la mémoire collective de la communauté UniPod : je réponds à vos questions "
+                   "à partir des messages du groupe, des réunions et des documents, en citant mes sources.",
         "doc_key_points": "Points clés :",
         "intro": "Voici ce que dit la mémoire du groupe :",
         "original_language": "(citations dans leur langue d'origine)",
@@ -47,6 +50,9 @@ MESSAGES = {
                     "for example: \"When is the next meeting?\"",
         "thanks": "You're welcome! Feel free to ask another question.",
         "doc_summary_intro": "Here is what the document \"{source}\" contains:",
+        "creator": "I was created by Eng. Souleymane Mahamat Saleh, from Chad! 🇹🇩\n"
+                   "He designed me to be the collective memory of the UniPod community: I answer your questions from "
+                   "the group's messages, meetings and documents, citing my sources.",
         "doc_key_points": "Key points:",
         "intro": "Here is what the group's memory says:",
         "original_language": "(quotes are in their original language)",
@@ -95,8 +101,22 @@ _GREETING_WORDS = set(
 _THANKS_WORDS = set("merci beaucoup thanks thank you thx super parfait génial ok okay top cool great".split())
 
 
+# « Qui t'a créé ? », « who made you? »… (accents et apostrophes facultatifs)
+_CREATOR_RE = re.compile(
+    r"(qui\s+(t['’ ]?\s*a|vous\s+a)\s+(cr[ée]{1,2}|cr[ée]{1,2}[ée]?|fait|con[çc]u|d[ée]velopp[ée]|programm[ée]|invent[ée]|construit)"
+    r"|qui\s+est\s+(ton|votre)\s+(cr[ée]ateur|concepteur|d[ée]veloppeur|auteur|inventeur)"
+    r"|(ton|votre)\s+(cr[ée]ateur|concepteur|d[ée]veloppeur)"
+    r"|qui\s+(est|sont)\s+derri[èe]re\s+(toi|vous|ce\s+bot|ce\s+chatbot|unipods?\s+memory)"
+    r"|who\s+(created|made|built|developed|designed|programmed|coded|invented)\s+(you|this\s+(bot|chatbot|app))"
+    r"|who\s+is\s+your\s+(creator|developer|designer|author|maker)"
+    r"|your\s+(creator|developer|maker))",
+    re.IGNORECASE)
+
+
 def small_talk(text: str) -> str | None:
-    """« greeting » ou « thanks » si le message n'est qu'une salutation / un remerciement, sinon None."""
+    """« creator », « greeting » ou « thanks » pour les messages de conversation courante, sinon None."""
+    if _CREATOR_RE.search(text):
+        return "creator"
     tokens = [t.lower().split("'")[-1] for t in _TOKEN_RE.findall(text)]
     if not tokens or len(tokens) > 8:
         return None

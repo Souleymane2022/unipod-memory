@@ -127,6 +127,10 @@ class Settings:
     whatsapp_verify_token: str = field(default_factory=lambda: _env("WHATSAPP_VERIFY_TOKEN"))
     whatsapp_app_secret: str = field(default_factory=lambda: _env("WHATSAPP_APP_SECRET"))
     whatsapp_api_version: str = field(default_factory=lambda: _env("WHATSAPP_API_VERSION", "v23.0"))
+    # Numéro public du bot, affiché sur le site avec un QR code (ex. +15551917088)
+    whatsapp_display_number: str = field(default_factory=lambda: _env("WHATSAPP_DISPLAY_NUMBER"))
+    # ID de l'app Meta : nécessaire pour téléverser la photo de profil du bot
+    whatsapp_app_id: str = field(default_factory=lambda: _env("WHATSAPP_APP_ID"))
     # Facultatif : numéros autorisés (format international sans +, séparés par des virgules)
     whatsapp_allowed_numbers: set = field(default_factory=lambda: {
         "".join(c for c in n if c.isdigit()) for n in _env("WHATSAPP_ALLOWED_NUMBERS").split(",") if n.strip()})

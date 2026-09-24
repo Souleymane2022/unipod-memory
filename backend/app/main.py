@@ -177,6 +177,7 @@ def health():
                                 "WHATSAPP_ALLOWED_NUMBERS_count": len(s.settings.whatsapp_allowed_numbers)},
             # Derniers messages reçus par les webhooks (instance courante) : diagnostic sans accès aux logs
             "recent_messages": _recent_events(s),
+            "whatsapp_number": "".join(c for c in s.settings.whatsapp_display_number if c.isdigit()),
             # Commit déployé (fourni par Vercel) : permet de vérifier quelle version tourne
             "version": (os.getenv("VERCEL_GIT_COMMIT_SHA") or "")[:7] or "local"}
 

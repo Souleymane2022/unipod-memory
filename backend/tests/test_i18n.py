@@ -71,3 +71,22 @@ def test_greeting_answer(client):
 def test_frontend_disables_browser_translation(client):
     html = client.get("/").text
     assert 'translate="no"' in html and 'content="notranslate"' in html
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Qui t'a créé ?", "creator"), ("qui ta cree", "creator"), ("Qui t a fait ?", "creator"),
+    ("Qui est ton créateur ?", "creator"), ("Qui vous a conçu ?", "creator"), ("Who created you?", "creator"),
+    ("who made you", "creator"), ("Who is your creator?", "creator"),
+    ("Qui a créé le programme METI ?", None), ("Qui est le créateur du hackathon ?", None),
+    ("Who is the creator of the hackathon?", None), ("Qui a gagné la coupe du monde ?", None),
+])
+def test_creator_question(text, expected):
+    from backend.app.i18n import small_talk
+    assert small_talk(text) == expected
+
+
+def test_creator_answer(client):
+    r = _ask(client, "Qui t'a créé ?")
+    assert r["mode"] == "chat" and "Souleymane Mahamat Saleh" in r["answer"] and "Tchadien" in r["answer"]
+    r = _ask(client, "Who made you?")
+    assert "Souleymane Mahamat Saleh" in r["answer"] and "Chad" in r["answer"]

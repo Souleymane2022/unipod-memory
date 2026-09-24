@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 
 from .messaging import error_reply, non_text_reply, reply
 
@@ -152,6 +152,72 @@ async def whatsapp_webhook(request: Request):
                 body = _safe_reply(m["text"].get("body", "") if m.get("type") == "text" else None, "whatsapp", svc)
                 _wa_send(s, sender, body, reply_to=msg_id)
     return {"status": "ok"}  # 200 rapide, sinon Meta renvoie le message
+
+
+@router.get("/api/whatsapp/qr.svg", include_in_schema=False)
+def whatsapp_qr(lang: str = "fr"):
+    """QR code qui ouvre la discussion WhatsApp avec le bot (message pré-rempli « aide » / « help »)."""
+    import io
+
+    import segno
+
+    from .config import get_settings
+
+    number = "".join(c for c in get_settings().whatsapp_display_number if c.isdigit())
+    if not number:
+        raise HTTPException(404, "WHATSAPP_DISPLAY_NUMBER non défini")
+    buf = io.BytesIO()
+    segno.make(f"https://wa.me/{number}?text={'help' if lang == 'en' else 'aide'}", error="m").save(
+        buf, kind="svg", scale=6, border=2, dark="#0b3d5c", light="#ffffff")
+    return Response(buf.getvalue(), media_type="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
+PROFILE_ABOUT = "Mémoire collective UniPod 🧠 — posez vos questions (FR/EN)"
+PROFILE_DESCRIPTION = ("UniPods Memory répond aux questions de la communauté UniPod à partir des messages, réunions et "
+                       "documents, en citant ses sources. Conçu par Ing. Souleymane Mahamat Saleh (Tchad). "
+                       "Envoyez « aide » pour commencer.")
+
+
+@router.get("/api/whatsapp/setup-profile", include_in_schema=False)
+def whatsapp_setup_profile(key: str = "", app_id: str = ""):
+    """À ouvrir une fois : met le logo UniPod en photo de profil du bot et remplit sa description.
+    https://<site>/api/whatsapp/setup-profile?key=<WHATSAPP_VERIFY_TOKEN>&app_id=<ID de l'app Meta>"""
+    from .config import ROOT_DIR, get_settings
+
+    s = get_settings()
+    if not s.whatsapp_verify_token or not hmac.compare_digest(key, s.whatsapp_verify_token):
+        raise HTTPException(403, "Paramètre key invalide (doit valoir WHATSAPP_VERIFY_TOKEN)")
+    app_id = app_id or s.whatsapp_app_id
+    if not (s.whatsapp_token and s.whatsapp_phone_number_id and app_id):
+        raise HTTPException(400, "WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID et app_id (ou WHATSAPP_APP_ID) sont requis")
+    graph = f"https://graph.facebook.com/{s.whatsapp_api_version}"
+    image = (ROOT_DIR / "frontend" / "whatsapp-profile.jpg").read_bytes()
+    steps: dict[str, Any] = {}
+    try:
+        # 1. Téléversement « reprenable » de l'image -> identifiant (handle) utilisable par WhatsApp
+        r = httpx.post(f"{graph}/{app_id}/uploads", timeout=30,
+                       params={"file_name": "unipod-logo.jpg", "file_length": len(image), "file_type": "image/jpeg",
+                               "access_token": s.whatsapp_token})
+        steps["upload_session"] = r.json()
+        upload_id = steps["upload_session"].get("id")
+        if not upload_id:
+            return {"ok": False, "steps": steps}
+        r = httpx.post(f"{graph}/{upload_id}", content=image, timeout=60,
+                       headers={"Authorization": f"OAuth {s.whatsapp_token}", "file_offset": "0"})
+        steps["upload"] = r.json()
+        handle = steps["upload"].get("h")
+        if not handle:
+            return {"ok": False, "steps": steps}
+        # 2. Profil WhatsApp Business : photo, « à propos » et description
+        r = httpx.post(f"{graph}/{s.whatsapp_phone_number_id}/whatsapp_business_profile", timeout=30,
+                       headers={"Authorization": f"Bearer {s.whatsapp_token}"},
+                       json={"messaging_product": "whatsapp", "profile_picture_handle": handle,
+                             "about": PROFILE_ABOUT, "description": PROFILE_DESCRIPTION})
+        steps["profile"] = r.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        return {"ok": False, "error": str(exc), "steps": steps}
+    return {"ok": bool(steps["profile"].get("success")), "steps": steps}
 
 
 # --------------------------------------------------------------------------- Telegram

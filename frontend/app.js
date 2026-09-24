@@ -6,6 +6,11 @@ const I18N = {
   fr: {
     tagline: "La mémoire collective du groupe : messages, réunions et documents.",
     tab_ask: "Poser une question", tab_ingest: "Ajouter des documents", tab_summary: "Résumé & décisions",
+    wa_title: "UniPods Memory sur WhatsApp",
+    wa_text: "Posez vos questions directement depuis WhatsApp : scannez le QR code ou appuyez sur le bouton, puis envoyez « aide ».",
+    wa_button: "Ouvrir WhatsApp",
+    wa_note: "Démo : numéro de test Meta, seuls les numéros autorisés reçoivent une réponse.",
+    credit: "Conçu par Ing. Souleymane Mahamat Saleh 🇹🇩 · Hackathon UniPod",
     welcome: "Bonjour ! Posez-moi une question sur ce qui s'est dit dans le groupe, en réunion ou dans les documents. Je réponds uniquement à partir des sources indexées et je les cite. Vous pouvez écrire en français ou en anglais.",
     examples: [
       "Quelle est la date limite de dépôt des projets pour le hackathon ?",
@@ -46,6 +51,11 @@ const I18N = {
   en: {
     tagline: "The group's collective memory: messages, meetings and documents.",
     tab_ask: "Ask a question", tab_ingest: "Add documents", tab_summary: "Summary & decisions",
+    wa_title: "UniPods Memory on WhatsApp",
+    wa_text: "Ask your questions straight from WhatsApp: scan the QR code or tap the button, then send \"help\".",
+    wa_button: "Open WhatsApp",
+    wa_note: "Demo: Meta test number, only authorised numbers receive a reply.",
+    credit: "Designed by Eng. Souleymane Mahamat Saleh 🇹🇩 · UniPod Hackathon",
     welcome: "Hello! Ask me anything about what was said in the group, in meetings or in documents. I only answer from the indexed sources and I cite them. You can write in English or French.",
     examples: [
       "What is the deadline to submit hackathon projects?",
@@ -139,7 +149,18 @@ document.querySelectorAll(".tab").forEach((btn) =>
 
 // ---- statut
 let lastHealth = null;
+function renderWhatsApp(h) {
+  const card = $("#wa-card");
+  if (!h.whatsapp_number) { card.hidden = true; return; }
+  const text = lang === "en" ? "help" : "aide";
+  $("#wa-link").href = `https://wa.me/${h.whatsapp_number}?text=${text}`;
+  $("#wa-number").textContent = "+" + h.whatsapp_number;
+  $("#wa-qr").src = `/api/whatsapp/qr.svg?lang=${lang}`;
+  card.hidden = false;
+}
+
 function renderStatus(h) {
+  renderWhatsApp(h);
   const st = $("#status");
   st.textContent = t("status_ok", h) + (h.version ? ` · v${h.version}` : "");
   st.title = h.ephemeral_storage ? t("status_ephemeral") : "";

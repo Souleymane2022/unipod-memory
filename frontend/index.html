@@ -27,6 +27,16 @@
     </div>
   </header>
 
+  <section id="wa-card" class="wa-card" hidden>
+    <div class="wa-text">
+      <h2><span class="wa-icon" aria-hidden="true">💬</span> <span data-i18n="wa_title"></span></h2>
+      <p data-i18n="wa_text"></p>
+      <a id="wa-link" class="wa-button" target="_blank" rel="noopener"><span data-i18n="wa_button"></span> <span id="wa-number"></span></a>
+      <p class="wa-note" data-i18n="wa_note"></p>
+    </div>
+    <img id="wa-qr" class="wa-qr" alt="QR code WhatsApp" width="150" height="150" />
+  </section>
+
   <nav class="tabs">
     <button class="tab active" data-tab="ask" data-i18n="tab_ask"></button>
     <button class="tab" data-tab="ingest" data-i18n="tab_ingest"></button>
@@ -92,6 +102,10 @@
       </div>
     </section>
   </main>
+  <footer class="credit">
+    <img src="/static/logo-unipod.png" alt="UniPod" />
+    <span data-i18n="credit"></span>
+  </footer>
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -210,3 +210,44 @@ def test_whatsapp_verification_does_not_start_engine(client, monkeypatch):
     r = client.get("/api/whatsapp/webhook", params={"hub.mode": "subscribe", "hub.verify_token": "phrase-rapide",
                                                     "hub.challenge": "777"})
     assert r.status_code == 200 and r.text == "777"
+
+
+def test_whatsapp_qr_and_site_card(client, monkeypatch):
+    monkeypatch.setenv("WHATSAPP_DISPLAY_NUMBER", "")
+    assert client.get("/api/whatsapp/qr.svg").status_code == 404  # sans numéro configuré
+    monkeypatch.setenv("WHATSAPP_DISPLAY_NUMBER", "+1 555 191 7088")
+    r = client.get("/api/whatsapp/qr.svg", params={"lang": "fr"})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml") and "<svg" in r.text
+    monkeypatch.setattr(main.services().settings, "whatsapp_display_number", "+1 555 191 7088")
+    assert client.get("/api/health").json()["whatsapp_number"] == "15551917088"
+    html = client.get("/").text
+    assert 'id="wa-card"' in html and 'class="credit"' in html
+
+
+def test_whatsapp_setup_profile(client, monkeypatch):
+    monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "verif-123")
+    monkeypatch.setenv("WHATSAPP_TOKEN", "wa-token")
+    monkeypatch.setenv("WHATSAPP_PHONE_NUMBER_ID", "1234567890")
+    calls = []
+
+    def fake_post(url, params=None, json=None, content=None, headers=None, timeout=None):
+        calls.append({"url": url, "params": params, "json": json, "headers": headers, "size": len(content or b"")})
+        if url.endswith("/uploads"):
+            body = {"id": "upload:MTphdHRhY2g"}
+        elif "upload:" in url:
+            body = {"h": "2::aW1hZ2UvanBlZw"}
+        else:
+            body = {"success": True}
+        return httpx.Response(200, json=body, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(channels.httpx, "post", fake_post)
+    assert client.get("/api/whatsapp/setup-profile", params={"key": "faux", "app_id": "42"}).status_code == 403
+    r = client.get("/api/whatsapp/setup-profile", params={"key": "verif-123", "app_id": "1899673154332704"}).json()
+    assert r["ok"] is True
+    assert calls[0]["url"].endswith("/1899673154332704/uploads") and calls[0]["params"]["file_type"] == "image/jpeg"
+    assert calls[1]["url"].endswith("/upload:MTphdHRhY2g") and calls[1]["headers"]["file_offset"] == "0"
+    assert calls[1]["size"] == calls[0]["params"]["file_length"] > 1000
+    profile = calls[2]
+    assert profile["url"].endswith("/1234567890/whatsapp_business_profile")
+    assert profile["json"]["profile_picture_handle"] == "2::aW1hZ2UvanBlZw"
+    assert len(profile["json"]["about"]) <= 139 and "Souleymane" in profile["json"]["description"]
