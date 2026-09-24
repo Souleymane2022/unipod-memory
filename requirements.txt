@@ -1,0 +1,14 @@
+# Cœur (tout est gratuit et local)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+chromadb>=0.5.0        # base vectorielle locale + embeddings ONNX all-MiniLM-L6-v2 intégrés
+pypdf>=4.0
+python-dotenv>=1.0
+httpx>=0.27            # appels LLM optionnels (Anthropic / OpenAI-compatible / Ollama) et bot Telegram
+
+# Tests
+pytest>=8.0
+
+# Optionnel : meilleurs embeddings multilingues (installe torch, ~2 Go)
+# sentence-transformers>=3.0

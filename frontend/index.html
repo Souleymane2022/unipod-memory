@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UniPods Memory</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">◎</span>
+      <div>
+        <h1>UniPods Memory</h1>
+        <p>La mémoire collective du groupe : messages, réunions et documents.</p>
+      </div>
+    </div>
+    <div id="status" class="status">…</div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="ask">Poser une question</button>
+    <button class="tab" data-tab="ingest">Ajouter des documents</button>
+    <button class="tab" data-tab="summary">Résumé &amp; décisions</button>
+  </nav>
+
+  <main>
+    <!-- Q/R -->
+    <section id="tab-ask" class="panel active">
+      <div id="chat" class="chat">
+        <div class="msg bot">
+          Bonjour ! Posez-moi une question sur ce qui s'est dit dans le groupe, en réunion ou dans les documents.
+          Je réponds uniquement à partir des sources indexées et je les cite.
+          <div class="examples">
+            <button class="chip">Quelle est la date limite de dépôt des projets pour le hackathon ?</button>
+            <button class="chip">Qu'est-ce qui a été décidé pour l'imprimante 3D pendant la réunion ?</button>
+            <button class="chip">Comment réserver une machine du fablab ?</button>
+            <button class="chip">Quel est le salaire du directeur de l'UniPod ?</button>
+          </div>
+        </div>
+      </div>
+      <form id="ask-form" class="ask">
+        <input id="question" type="text" autocomplete="off" placeholder="Ex. : Quand a lieu la prochaine réunion ?" required />
+        <button type="submit">Demander</button>
+      </form>
+    </section>
+
+    <!-- Ingestion -->
+    <section id="tab-ingest" class="panel">
+      <div class="card">
+        <h2>Ajouter des fichiers</h2>
+        <p class="hint">Formats : .txt, .md, .pdf. Exports de chat (<code>[2026-09-08 09:12] Nom: message</code> ou WhatsApp),
+          transcriptions (<code>[00:04:05] Nom: texte</code>) et documents sont détectés automatiquement.
+          Un fichier du même nom remplace l'ancienne version.</p>
+        <form id="ingest-form">
+          <input id="files" type="file" multiple accept=".txt,.md,.pdf" required />
+          <div class="row">
+            <label>Type
+              <select id="doc_type">
+                <option value="auto">Détection automatique</option>
+                <option value="chat">Messages (chat)</option>
+                <option value="transcript">Transcription de réunion</option>
+                <option value="document">Document</option>
+              </select>
+            </label>
+            <label>Auteur (optionnel)<input id="author" type="text" /></label>
+            <label>Date (optionnel)<input id="date" type="date" /></label>
+          </div>
+          <button type="submit">Indexer</button>
+        </form>
+        <div id="ingest-result"></div>
+      </div>
+      <div class="card">
+        <h2>Documents indexés</h2>
+        <table id="docs"><thead><tr><th>Source</th><th>Type</th><th>Dates</th><th>Auteurs</th><th>Chunks</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- Résumé -->
+    <section id="tab-summary" class="panel">
+      <div class="card">
+        <h2>Résumé automatique</h2>
+        <p class="hint">Choisissez une conversation ou une réunion : résumé, décisions et tâches extraites.</p>
+        <div class="row">
+          <select id="summary-source"></select>
+          <button id="summary-btn">Résumer</button>
+        </div>
+        <div id="summary-result"></div>
+      </div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+[2026-09-08 09:12] Awa Diallo: Bonjour à toutes et à tous ! Bienvenue dans le groupe général de l'UniPod. On est maintenant plus de 400 membres, donc merci de lire les messages épinglés avant de poser une question.
+[2026-09-08 09:15] Moussa Kane: Bonjour Awa, merci pour l'accueil. Est-ce que le hackathon "Innover pour le climat" est confirmé pour octobre ?
+[2026-09-08 09:21] Awa Diallo: Oui, c'est confirmé. Le hackathon aura lieu du 17 au 19 octobre 2026 dans la grande salle de l'UniPod. Les équipes doivent compter entre 3 et 5 personnes.
+[2026-09-08 09:24] Fatimé Abakar: Super nouvelle ! Il faut s'inscrire où exactement ?
+[2026-09-08 09:30] Awa Diallo: Les inscriptions se font uniquement via le formulaire en ligne partagé dans les messages épinglés. La date limite de dépôt des projets pour le hackathon est le 10 octobre 2026 à 23h59. Après cette date, aucune candidature ne sera acceptée.
+[2026-09-08 09:32] Idriss Mahamat: Est-ce qu'on peut participer seul si on n'a pas d'équipe ?
+[2026-09-08 09:36] Awa Diallo: Oui, tu peux t'inscrire seul. Une session de formation d'équipes est prévue le 12 octobre à 15h pour regrouper les participants individuels.
+[2026-09-08 10:02] Halimé Oumar: Les repas seront pris en charge pendant les trois jours ?
+[2026-09-08 10:05] Awa Diallo: Oui, les repas du midi et du soir sont offerts par nos partenaires pendant tout le hackathon. Pensez à signaler vos allergies dans le formulaire.
+[2026-09-09 14:40] Moussa Kane: Petite question technique : le wifi de l'UniPod a changé ? Je n'arrive plus à me connecter.
+[2026-09-09 14:47] Brahim Saleh: Oui, le réseau s'appelle maintenant UniPod-Membres. Le mot de passe est affiché à l'accueil et il change chaque premier lundi du mois. Ne le partagez pas dans le groupe s'il vous plaît.
+[2026-09-09 15:03] Fatimé Abakar: Merci Brahim ! Et pour imprimer des documents, on passe par qui ?
+[2026-09-09 15:10] Brahim Saleh: Pour les impressions papier, c'est à l'accueil, 20 pages gratuites par semaine et par membre. Pour l'impression 3D, il faut passer par le formulaire du fablab.
+[2026-09-10 11:20] Idriss Mahamat: Les prix du hackathon ont été annoncés ?
+[2026-09-10 11:34] Awa Diallo: Oui : 1er prix 1 500 000 FCFA plus six mois d'incubation à l'UniPod, 2e prix 750 000 FCFA, 3e prix 400 000 FCFA. Il y aura aussi un prix spécial pour la meilleure équipe féminine.
+[2026-09-10 11:40] Halimé Oumar: Génial, merci pour l'info !
+[2026-09-11 08:55] Moussa Kane: Bonjour, quelqu'un sait à quelle heure ouvre l'UniPod le samedi ?
+[2026-09-11 09:02] Brahim Saleh: En semaine, l'UniPod est ouvert de 8h à 20h. Le samedi, c'est de 9h à 14h. Fermé le dimanche et les jours fériés.
+[2026-09-11 16:18] Zara Hassan: Est-ce que les mentors du hackathon sont connus ?
+[2026-09-11 16:30] Awa Diallo: On a déjà huit mentors confirmés, dont deux ingénieurs en énergie solaire et une spécialiste de l'agriculture intelligente. La liste complète sera publiée le 1er octobre.
+[2026-09-12 10:10] Fatimé Abakar: Est-ce que les participants doivent venir avec leur propre ordinateur ?
+[2026-09-12 10:14] Awa Diallo: Oui, chaque participant apporte son ordinateur portable. L'UniPod fournit les multiprises, le wifi, les écrans de présentation et l'accès au matériel du fablab pour les prototypes.
+[2026-09-12 18:45] Idriss Mahamat: Le thème exact du hackathon, c'est seulement l'énergie ?
+[2026-09-12 18:52] Awa Diallo: Non, le thème "Innover pour le climat" couvre trois axes : l'énergie propre, la gestion de l'eau et l'agriculture résiliente. Chaque équipe choisit un axe au moment du dépôt de projet.
+[2026-09-13 09:30] Zara Hassan: Est-ce que la réunion mensuelle de septembre a été enregistrée ? Je n'ai pas pu venir.
+[2026-09-13 09:41] Brahim Saleh: Oui, la transcription de la réunion du 15 septembre sera ajoutée à la mémoire du groupe. Vous pourrez poser vos questions directement au chatbot UniPods Memory.
+[2026-09-14 12:05] Moussa Kane: Merci à l'équipe, c'est vraiment utile avec le volume de messages ici !

@@ -1,0 +1,29 @@
+Titre : Réunion mensuelle de coordination UniPod
+Date : 2026-09-15
+Participants : Awa Diallo, Brahim Saleh, Moussa Kane, Fatimé Abakar, Dr. Hassan Ali
+Type : transcript
+
+[00:00:15] Awa Diallo: Bonjour à tous, merci d'être présents. Nous avons quatre points à l'ordre du jour : le budget du fablab, l'imprimante 3D, la préparation du hackathon et la communication avec les membres.
+[00:01:02] Dr. Hassan Ali: Commençons par le budget. Le budget trimestriel du fablab est de 2 millions de FCFA. Nous en avons déjà dépensé 1,2 million, principalement en filament et en composants électroniques.
+[00:02:30] Brahim Saleh: Il faut qu'on garde une réserve pour le hackathon. Je propose de bloquer 500 000 FCFA pour le matériel de prototypage des équipes.
+[00:03:10] Dr. Hassan Ali: Je suis d'accord. C'est décidé : 500 000 FCFA sont réservés au matériel de prototypage du hackathon.
+[00:04:05] Awa Diallo: Deuxième point, l'imprimante 3D. Beaucoup de membres se plaignent des délais d'attente et de la panne de la semaine dernière.
+[00:04:50] Moussa Kane: L'imprimante Prusa est réparée depuis vendredi, la buse a été changée. Mais la demande est trop forte pour une seule machine. On a eu 46 demandes d'impression le mois dernier.
+[00:05:40] Fatimé Abakar: Je propose d'acheter une deuxième imprimante 3D et de mettre en place un système de réservation par créneaux de deux heures maximum.
+[00:06:25] Dr. Hassan Ali: Pour l'achat, il faut d'abord un devis. Moussa, tu peux t'en occuper ?
+[00:06:40] Moussa Kane: Oui, je vais demander trois devis pour une deuxième imprimante 3D et je les présente avant le 30 septembre.
+[00:07:15] Awa Diallo: Donc on valide la décision suivante : les impressions 3D seront limitées à des créneaux de deux heures maximum, réservés via le formulaire du fablab, à partir du 1er octobre. L'achat d'une deuxième imprimante sera décidé à la prochaine réunion, selon les devis.
+[00:08:00] Brahim Saleh: Et il faudra former les membres. Je peux animer une formation à l'impression 3D le samedi 27 septembre à 10h.
+[00:08:30] Awa Diallo: Parfait, merci Brahim. Troisième point, le hackathon. Où en sont les inscriptions ?
+[00:09:10] Fatimé Abakar: Nous avons 34 équipes inscrites et 21 participants individuels. L'objectif est d'atteindre 50 équipes avant la date limite du 10 octobre.
+[00:10:05] Dr. Hassan Ali: Il nous manque encore un jury. Je propose de contacter l'Agence nationale de l'énergie et le ministère de l'Environnement.
+[00:10:45] Awa Diallo: D'accord. Dr. Hassan, vous vous chargez de contacter les membres du jury et de confirmer les noms avant le 5 octobre ?
+[00:11:00] Dr. Hassan Ali: Oui, je m'en occupe.
+[00:11:40] Fatimé Abakar: Pour augmenter les inscriptions, je vais organiser une séance d'information en ligne le 25 septembre à 18h, et je publierai le lien dans le groupe général.
+[00:12:30] Brahim Saleh: Il faudrait aussi prévoir la logistique : tables, rallonges, badges. Je m'occupe de la logistique avec l'équipe de l'accueil.
+[00:13:20] Awa Diallo: Quatrième point, la communication. Le groupe général dépasse 400 membres, beaucoup de questions reviennent tous les jours et des membres ratent les réunions.
+[00:14:10] Moussa Kane: C'est justement pour ça qu'on teste le chatbot UniPods Memory. Il indexe les messages du groupe, les transcriptions des réunions et les documents officiels, et il répond avec la source.
+[00:15:00] Dr. Hassan Ali: Très bonne initiative. Il faut qu'il réponde honnêtement quand il ne sait pas, sans inventer.
+[00:15:35] Awa Diallo: C'est décidé : toutes les transcriptions de réunion seront ajoutées au chatbot au plus tard 48 heures après chaque réunion. Moussa est responsable de la mise à jour.
+[00:16:20] Fatimé Abakar: Et on garde les messages épinglés pour les informations critiques.
+[00:16:50] Awa Diallo: Oui. La prochaine réunion mensuelle aura lieu le 13 octobre 2026 à 16h, dans la salle de conférence de l'UniPod. Merci à tous, la séance est levée.
