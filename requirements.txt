@@ -5,10 +5,12 @@ python-multipart>=0.0.9
 chromadb>=0.5.0        # base vectorielle locale + embeddings ONNX all-MiniLM-L6-v2 intégrés
 pypdf>=4.0
 python-dotenv>=1.0
-httpx>=0.27            # appels LLM optionnels (Anthropic / OpenAI-compatible / Ollama) et bot Telegram
+httpx>=0.27            # appels LLM optionnels (Anthropic / Gemini / OpenAI-compatible / Ollama) et bot Telegram
+psycopg[binary]>=3.1   # base PostgreSQL + pgvector optionnelle (ex. Neon sur Vercel), active si DATABASE_URL
 
 # Tests
 pytest>=8.0
+pgserver>=0.1          # PostgreSQL + pgvector embarqué, pour tester le stockage PostgreSQL
 
 # Optionnel : meilleurs embeddings multilingues (installe torch, ~2 Go)
 # sentence-transformers>=3.0

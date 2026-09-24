@@ -23,7 +23,7 @@ from .insights import summarize
 from .llm import LLMClient
 from .parsers import DOC_TYPES, extract_text, parse_document
 from .rag import RAGEngine
-from .store import VectorStore
+from .store import create_store
 from .translate import Translator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -37,7 +37,7 @@ SAMPLES_DIR = ROOT_DIR / "data" / "samples"
 class Services:
     def __init__(self):
         self.settings = get_settings()
-        self.store = VectorStore(self.settings)
+        self.store = create_store(self.settings)
         self.llm = LLMClient(self.settings)
         self.translator = Translator(self.settings, self.llm)
         self.rag = RAGEngine(self.settings, self.store, self.llm, self.translator)
@@ -150,7 +150,8 @@ def health():
         return JSONResponse(status_code=503, content={
             "status": "error", "detail": f"{type(exc).__name__}: {exc}"[:1000]})
     return {"status": "ok", "chunks": s.store.count(), "llm": s.llm.describe(),
-            "embeddings": s.settings.embedding_backend, "ephemeral_storage": s.settings.ephemeral_storage,
+            "embeddings": s.settings.embedding_backend, "store": s.store.kind,
+            "ephemeral_storage": s.store.ephemeral,
             "translation": s.translator.provider,
             # Commit déployé (fourni par Vercel) : permet de vérifier quelle version tourne
             "version": (os.getenv("VERCEL_GIT_COMMIT_SHA") or "")[:7] or "local"}

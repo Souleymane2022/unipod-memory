@@ -25,10 +25,8 @@ def main() -> None:
 
     s = services()
     if args.reset:
-        s.store.client.delete_collection(s.settings.collection_name)
-        services.cache_clear()
-        s = services()
-        print("Collection réinitialisée.")
+        s.store.reset()
+        print(f"Base réinitialisée ({s.store.kind}).")
 
     folder = Path(args.folder)
     files = sorted(p for p in folder.rglob("*") if p.is_file() and p.suffix.lower() in ALLOWED_EXTENSIONS)

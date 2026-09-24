@@ -32,7 +32,8 @@ et les **documents**, puis répond directement aux questions **en citant la sour
     config.py        paramètres (.env)
     parsers.py       lecture txt/md/pdf, détection chat/transcription/document, en-têtes (Titre, Date, Auteur…)
     chunker.py       découpage 300–500 mots
-    store.py         ChromaDB (persistant) + fonction d'embedding
+    store.py         ChromaDB (persistant) + fonction d'embedding + choix automatique de la base
+    pg_store.py      PostgreSQL + pgvector (Neon sur Vercel), actif si DATABASE_URL
     rag.py           recherche hybride, seuil de pertinence, réponse citée (LLM ou extractive)
     llm.py           client LLM optionnel (httpx, sans SDK)
     insights.py      bonus : résumé, décisions, tâches
@@ -41,7 +42,7 @@ et les **documents**, puis répond directement aux questions **en citant la sour
     translate.py     traduction des citations (LLM ou MyMemory gratuit), repli sur le texte original
     telegram_bot.py  bot Telegram optionnel
   scripts/ingest_folder.py   indexation d'un dossier en ligne de commande
-  tests/             43 tests pytest (parsing, chunking, API, PDF/docx/odt/html, anti-hallucination, bilinguisme,
+  tests/             100 tests pytest (API sur ChromaDB et PostgreSQL, parsing, PDF/docx/odt/html, anti-hallucination, bilinguisme,
                      traduction simulée, LLM simulé, bot)
 /data
   samples/           jeu de démo : chat du groupe, transcription de réunion, guide du fablab
@@ -95,8 +96,23 @@ Quand la variable `VERCEL` est présente, l'application s'adapte automatiquement
 - base ChromaDB, fichiers envoyés et modèle d'embedding stockés dans `/tmp/unipods` (seul dossier inscriptible) ;
 - le jeu de démo `data/samples` est **indexé automatiquement** à chaque démarrage à froid (`AUTO_SEED=1`).
 
+#### Mémoire permanente avec Neon (PostgreSQL) — recommandé sur Vercel
+
+Sans base de données, Vercel efface les documents ajoutés à chaque redémarrage. Avec **Neon** (PostgreSQL + pgvector,
+offre gratuite), la mémoire est permanente et partagée par toutes les instances :
+
+1. Projet Vercel → onglet **Storage** → **Create Database** → **Neon** (ou *Marketplace → Neon*) → relier au projet.
+   Vercel ajoute automatiquement la variable **`DATABASE_URL`** (et `POSTGRES_URL`).
+2. **Redéployer**. Le statut affiche alors « base PostgreSQL » et ne mentionne plus le stockage temporaire.
+3. Au premier démarrage, la table est créée et le jeu de démo indexé ; ensuite, tout document ajouté est conservé.
+
+Côté code, `DATABASE_URL` présent ⇒ `backend/app/pg_store.py` (une table `unipods_memory_chunks` : texte, métadonnées et
+vecteur pgvector, recherche par distance cosinus). Sans `DATABASE_URL`, c'est **ChromaDB** local, comme avant.
+Les embeddings sont calculés de la même façon dans les deux cas. `VECTOR_STORE=chroma|postgres` force un choix.
+Tests : toute la suite d'API tourne sur les deux bases (PostgreSQL embarqué via le paquet `pgserver`).
+
 Limites à connaître (hébergement serverless) :
-- **stockage temporaire** : un document ajouté via l'interface peut disparaître au redémarrage d'une instance,
+- **sans Neon, stockage temporaire** : un document ajouté via l'interface peut disparaître au redémarrage d'une instance,
   et deux instances ne partagent pas la même base. Pour une mémoire durable, ajoutez les fichiers dans
   `data/samples/` et redéployez, ou hébergez le backend sur un service avec disque persistant (Render, Railway, Fly.io…) ;
 - **premier appel lent** (démarrage à froid) : installation des dépendances restantes + téléchargement du modèle (~80 Mo) + indexation ;
@@ -265,7 +281,7 @@ multilingue (`EMBEDDING_BACKEND=sentence-transformers`, hors Vercel).
 
 ## Bilan
 
-**Ce qui fonctionne** (vérifié par 43 tests automatisés, des appels HTTP réels et un test navigateur de l'interface) :
+**Ce qui fonctionne** (vérifié par 100 tests automatisés, dont toute la suite d'API sur ChromaDB **et** PostgreSQL, des appels HTTP réels et un test navigateur de l'interface) :
 ingestion txt/md/pdf avec métadonnées, découpage 300–500 mots, ChromaDB persistant, Q/R avec citations exactes
 (auteur, date, heure, extrait), refus honnête quand l'information manque, interface web complète,
 résumé + décisions + tâches, interface et réponses en français et en anglais, fonctionnement 100 % gratuit et hors ligne (hors téléchargement initial du modèle).

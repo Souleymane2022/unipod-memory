@@ -8,7 +8,7 @@ from typing import Any
 
 from .config import Settings
 from .llm import LLMClient, LLMError
-from .store import VectorStore
+from .store import BaseStore as VectorStore
 from .i18n import detect_lang, expand_query, msg, normalize_lang, small_talk
 from .translate import Translator
 from .textutils import concept_idf, concept_overlap, query_concepts, split_sentences

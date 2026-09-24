@@ -36,7 +36,8 @@ const I18N = {
     summary: "Résumé", decisions: "Décisions", tasks: "Tâches / actions",
     no_decisions: "Aucune décision détectée.", no_tasks: "Aucune tâche détectée.",
     summary_extractive: "Mode extractif (heuristiques, sans LLM) : les phrases sont citées dans leur langue d'origine.",
-    status_ok: (h) => `${h.chunks} passages indexés · LLM : ${h.llm === "none" ? "aucun (mode extractif)" : h.llm}` + (h.ephemeral_storage ? " · stockage temporaire (démo)" : ""),
+    status_ok: (h) => `${h.chunks} passages indexés · LLM : ${h.llm === "none" ? "aucun (mode extractif)" : h.llm}` +
+      (h.store === "postgres" ? " · base PostgreSQL" : "") + (h.ephemeral_storage ? " · stockage temporaire (démo)" : ""),
     status_ephemeral: "Hébergement serverless : les documents ajoutés peuvent disparaître au redémarrage. Le jeu de démo est réindexé automatiquement.",
     status_error: "Erreur serveur : ", status_starting: (n) => `Démarrage du serveur… (${n}/12)`,
     status_down: (m) => `API injoignable (${m}). Ouvrez /api/health pour le détail.`,
@@ -75,7 +76,8 @@ const I18N = {
     summary: "Summary", decisions: "Decisions", tasks: "Tasks / actions",
     no_decisions: "No decision detected.", no_tasks: "No task detected.",
     summary_extractive: "Extractive mode (heuristics, no LLM): sentences are quoted in their original language.",
-    status_ok: (h) => `${h.chunks} passages indexed · LLM: ${h.llm === "none" ? "none (extractive mode)" : h.llm}` + (h.ephemeral_storage ? " · temporary storage (demo)" : ""),
+    status_ok: (h) => `${h.chunks} passages indexed · LLM: ${h.llm === "none" ? "none (extractive mode)" : h.llm}` +
+      (h.store === "postgres" ? " · PostgreSQL database" : "") + (h.ephemeral_storage ? " · temporary storage (demo)" : ""),
     status_ephemeral: "Serverless hosting: uploaded documents may disappear on restart. The demo dataset is re-indexed automatically.",
     status_error: "Server error: ", status_starting: (n) => `Starting server… (${n}/12)`,
     status_down: (m) => `API unreachable (${m}). Open /api/health for details.`,

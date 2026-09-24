@@ -65,6 +65,10 @@ class Settings:
     auto_seed: bool = field(default_factory=lambda: _env(
         "AUTO_SEED", "1" if ON_VERCEL else "0").lower() in ("1", "true", "yes"))
     ephemeral_storage: bool = ON_VERCEL
+    # Base vectorielle : auto (PostgreSQL si DATABASE_URL, sinon ChromaDB) | chroma | postgres
+    vector_store: str = field(default_factory=lambda: _env("VECTOR_STORE", "auto").lower())
+    # PostgreSQL + pgvector (Neon via l'intégration Vercel crée DATABASE_URL et POSTGRES_URL)
+    database_url: str = field(default_factory=lambda: _env("DATABASE_URL") or _env("POSTGRES_URL"))
     collection_name: str = field(default_factory=lambda: _env("COLLECTION_NAME", "unipods_memory"))
 
     # Embeddings : "default" (ONNX all-MiniLM-L6-v2 local, gratuit),
