@@ -64,3 +64,20 @@ def test_vercel_storage_always_under_tmp(monkeypatch):
     s = config.Settings()
     assert str(s.chroma_dir) == "/tmp/unipods/chroma" and str(s.upload_dir) == "/tmp/unipods/uploads"
     assert s.model_cache_dir == "/tmp/unipods/models"
+
+
+def test_database_url_detected_with_vercel_prefix(monkeypatch):
+    """Intégration Neon avec préfixe personnalisé (ex. STORAGE_URL au lieu de DATABASE_URL)."""
+    from backend.app.config import Settings
+
+    for name in ("DATABASE_URL", "POSTGRES_URL"):
+        monkeypatch.delenv(name, raising=False)
+    assert Settings().database_url == ""
+    monkeypatch.setenv("STORAGE_URL_UNPOOLED", "postgresql://direct")
+    monkeypatch.setenv("STORAGE_URL", "postgresql://user:pw@ep-pooler.neon.tech/neondb?sslmode=require")
+    monkeypatch.setenv("SOME_API_URL", "https://example.com")
+    assert Settings().database_url.startswith("postgresql://user:pw@ep-pooler")
+    monkeypatch.setenv("STORAGE_DATABASE_URL", "postgres://preferred")
+    assert Settings().database_url == "postgres://preferred"
+    monkeypatch.setenv("DATABASE_URL", "postgres://plain")
+    assert Settings().database_url == "postgres://plain"

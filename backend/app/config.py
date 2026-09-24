@@ -26,6 +26,21 @@ if ON_VERCEL:
     os.environ["HOME"] = _TMP
 
 
+def _find_database_url() -> str:
+    """Adresse PostgreSQL : DATABASE_URL, POSTGRES_URL, ou toute variable <PRÉFIXE>_URL / _DATABASE_URL
+    contenant une adresse postgres:// (l'intégration Neon de Vercel permet un préfixe, ex. STORAGE_URL)."""
+    for name in ("DATABASE_URL", "POSTGRES_URL"):
+        if _env(name):
+            return _env(name)
+    candidates = sorted(
+        (name for name, value in os.environ.items()
+         if name.endswith("_URL") and value.strip().startswith(("postgres://", "postgresql://"))
+         and "UNPOOLED" not in name and "NON_POOLING" not in name and "PRISMA" not in name),
+        key=lambda n: (not n.endswith("DATABASE_URL"), not n.endswith("POSTGRES_URL"), n),
+    )
+    return os.environ[candidates[0]].strip() if candidates else ""
+
+
 def _path(value: str) -> Path:
     p = Path(value)
     return p if p.is_absolute() else ROOT_DIR / p
@@ -68,7 +83,7 @@ class Settings:
     # Base vectorielle : auto (PostgreSQL si DATABASE_URL, sinon ChromaDB) | chroma | postgres
     vector_store: str = field(default_factory=lambda: _env("VECTOR_STORE", "auto").lower())
     # PostgreSQL + pgvector (Neon via l'intégration Vercel crée DATABASE_URL et POSTGRES_URL)
-    database_url: str = field(default_factory=lambda: _env("DATABASE_URL") or _env("POSTGRES_URL"))
+    database_url: str = field(default_factory=_find_database_url)
     collection_name: str = field(default_factory=lambda: _env("COLLECTION_NAME", "unipods_memory"))
 
     # Embeddings : "default" (ONNX all-MiniLM-L6-v2 local, gratuit),
