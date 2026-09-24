@@ -11,7 +11,9 @@ En cas d'échec (quota, réseau), on renvoie None et l'appelant garde le texte o
 """
 from __future__ import annotations
 
+import json
 import logging
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -66,9 +68,14 @@ class Translator:
         return out
 
     def translate_many(self, texts: list[str], src_langs: list[str], tgt: str) -> list[str | None]:
-        """Traductions en parallèle (latence réseau) ; None pour chaque échec."""
+        """Plusieurs traductions ; None pour chaque échec.
+
+        Avec un LLM : une seule requête pour tout le lot (les offres gratuites limitent le nombre de
+        requêtes par minute). Avec MyMemory : requêtes en parallèle (une par texte)."""
         if not texts:
             return []
+        if self.provider == "llm" and len(texts) > 1:
+            return self._llm_batch(texts, src_langs, tgt)
         with ThreadPoolExecutor(max_workers=min(4, len(texts))) as pool:
             return list(pool.map(lambda args: self.translate(args[0], args[1], tgt), zip(texts, src_langs)))
 
@@ -77,6 +84,38 @@ class Translator:
         system = (f"Translate the user's text from {LANG_NAMES[src]} to {LANG_NAMES[tgt]}. "
                   "Output only the translation, keep names, dates, numbers and amounts unchanged.")
         return self.llm.complete(system, text, max_tokens=600).strip() or None
+
+    def _llm_batch(self, texts: list[str], src_langs: list[str], tgt: str) -> list[str | None]:
+        results: list[str | None] = [None] * len(texts)
+        todo = []
+        for i, (text, src) in enumerate(zip(texts, src_langs)):
+            key = (text.strip(), src, tgt)
+            if src == tgt:
+                results[i] = text
+            elif key in self._cache:
+                results[i] = self._cache[key]
+            else:
+                todo.append(i)
+        if not todo or time.monotonic() < self._paused_until:
+            return results
+        system = (f"Translate each string of the JSON array into {LANG_NAMES[tgt]}. Keep names, dates, numbers and "
+                  "amounts unchanged. Answer ONLY with a JSON array of strings, same length and same order.")
+        payload = json.dumps([texts[i] for i in todo], ensure_ascii=False)
+        try:
+            raw = self.llm.complete(system, payload, max_tokens=300 + 2 * len(payload))
+            m = re.search(r"\[.*\]", raw, re.DOTALL)
+            out = json.loads(m.group(0) if m else raw)
+            if not isinstance(out, list) or len(out) != len(todo):
+                raise ValueError(f"réponse de {len(out) if isinstance(out, list) else '?'} éléments au lieu de {len(todo)}")
+        except (LLMError, ValueError) as exc:
+            log.warning("Traduction groupée impossible, suspendue %ss : %s", RETRY_AFTER_S, exc)
+            self._paused_until = time.monotonic() + RETRY_AFTER_S
+            return results
+        for i, tr in zip(todo, out):
+            if isinstance(tr, str) and tr.strip():
+                results[i] = tr.strip()
+                self._cache[(texts[i].strip(), src_langs[i], tgt)] = results[i]
+        return results
 
     def _mymemory(self, text: str, src: str, tgt: str) -> str | None:
         parts = []

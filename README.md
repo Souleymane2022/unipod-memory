@@ -112,10 +112,10 @@ Avec un LLM, il rédige une réponse synthétique, toujours contrainte aux extra
 1. Créer une clé sur [Google AI Studio](https://aistudio.google.com) → *Get API key* (compte Google, pas de carte bancaire).
 2. Ajouter **une seule variable** (dans `.env`, ou sur Vercel : *Settings → Environment Variables*, puis redéployer) :
    ```bash
-   GEMINI_API_KEY=AIza...        # GOOGLE_API_KEY est aussi accepté
-   # facultatif : LLM_MODEL=gemini-2.5-flash (par défaut) ou un autre modèle listé dans AI Studio
+   GEMINI_API_KEY=AQ....        # GOOGLE_API_KEY est aussi accepté
+   # facultatif : LLM_MODEL=gemini-3.6-flash (par défaut) ou un autre modèle listé dans AI Studio
    ```
-3. Le statut en haut de la page affiche alors `LLM : gemini:gemini-2.5-flash`.
+3. Le statut en haut de la page affiche alors `LLM : gemini:gemini-3.6-flash`.
 
 Ce que ça change : réponses rédigées en français **ou** en anglais, résumés rédigés, et la traduction des citations
 passe par Gemini (plus besoin de MyMemory). Si Gemini refuse (clé invalide, quota gratuit atteint), l'application

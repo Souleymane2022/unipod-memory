@@ -10,6 +10,7 @@ Fournisseurs :
 from __future__ import annotations
 
 import logging
+import time
 
 import httpx
 
@@ -18,20 +19,36 @@ from .config import Settings
 log = logging.getLogger(__name__)
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-# Les modèles Gemini 2.5 « réfléchissent » avant de répondre et ces tokens comptent dans max_tokens :
+# Les modèles Gemini récents « réfléchissent » avant de répondre et ces tokens comptent dans max_tokens :
 # on ajoute une marge pour ne pas obtenir une réponse vide ou tronquée.
 GEMINI_THINKING_MARGIN = 3000
 
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5",
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-3.6-flash",
     "openai": "gpt-4o-mini",
     "ollama": "llama3.1",
 }
 
 
+# Erreurs temporaires (surcharge, limite de requêtes par minute de l'offre gratuite) : on réessaie.
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+RETRY_DELAYS_S = (2, 5)
+MAX_RETRY_AFTER_S = 10
+
+
 class LLMError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int | None = None, retry_after: float | None = None):
+        super().__init__(message)
+        self.status = status
+        self.retry_after = retry_after
+
+
+def _retry_after(r: httpx.Response) -> float | None:
+    try:
+        return float(r.headers.get("retry-after", ""))
+    except ValueError:
+        return None
 
 
 def _error_message(r: httpx.Response) -> str:
@@ -71,8 +88,21 @@ class LLMClient:
         return f"{self.provider}:{self.model}" if self.enabled else "none"
 
     def complete(self, system: str, user: str, max_tokens: int = 800) -> str:
+        """Appel au LLM, avec 2 nouvelles tentatives sur les erreurs temporaires (429/5xx)."""
         if not self.enabled:
             raise LLMError("Aucun LLM configuré")
+        for attempt, delay in enumerate((*RETRY_DELAYS_S, None)):
+            try:
+                return self._complete_once(system, user, max_tokens)
+            except LLMError as exc:
+                if delay is None or exc.status not in RETRYABLE_STATUS:
+                    raise
+                wait = min(exc.retry_after or delay, MAX_RETRY_AFTER_S)
+                log.info("LLM %s indisponible (HTTP %s), nouvel essai dans %ss", self.provider, exc.status, wait)
+                time.sleep(wait)
+        raise AssertionError("inaccessible")
+
+    def _complete_once(self, system: str, user: str, max_tokens: int) -> str:
         try:
             if self.provider == "anthropic":
                 return self._anthropic(system, user, max_tokens)
@@ -100,7 +130,7 @@ class LLMClient:
             timeout=self.settings.llm_timeout,
         )
         if r.status_code >= 400:
-            raise LLMError(f"Anthropic HTTP {r.status_code}: {_error_message(r)}")
+            raise LLMError(f"Anthropic HTTP {r.status_code}: {_error_message(r)}", r.status_code, _retry_after(r))
         data = r.json()
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
 
@@ -127,7 +157,7 @@ class LLMClient:
             timeout=self.settings.llm_timeout,
         )
         if r.status_code >= 400:
-            raise LLMError(f"{self.provider} HTTP {r.status_code}: {_error_message(r)}")
+            raise LLMError(f"{self.provider} HTTP {r.status_code}: {_error_message(r)}", r.status_code, _retry_after(r))
         choice = r.json()["choices"][0]
         content = (choice.get("message") or {}).get("content") or ""
         if not content.strip():
