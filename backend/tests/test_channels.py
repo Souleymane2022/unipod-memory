@@ -18,6 +18,7 @@ def wa(client, monkeypatch):
                  "whatsapp_verify_token": "verif-123", "whatsapp_app_secret": SECRET,
                  "whatsapp_allowed_numbers": set(), "whatsapp_api_version": "v23.0"}.items():
         monkeypatch.setattr(s, k, v)
+    monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "verif-123")  # la vérification lit la configuration directement
     sent = []
 
     def fake_post(url, json=None, headers=None, timeout=None):
@@ -196,3 +197,16 @@ def test_events_persist_across_instances_with_postgres(client, wa, monkeypatch):
     channels.RECENT_EVENTS.clear()  # autre instance serverless : mémoire vide
     events = client.get("/api/health").json()["recent_messages"]
     assert events and events[0]["status"] == "réponse_envoyée"
+
+
+def test_whatsapp_verification_does_not_start_engine(client, monkeypatch):
+    """Démarrage à froid : la vérification Meta ne doit pas attendre l'initialisation du moteur."""
+    monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "phrase-rapide")
+
+    def boom():
+        raise AssertionError("le moteur ne doit pas être initialisé pour la vérification")
+
+    monkeypatch.setattr(channels, "_services", boom)
+    r = client.get("/api/whatsapp/webhook", params={"hub.mode": "subscribe", "hub.verify_token": "phrase-rapide",
+                                                    "hub.challenge": "777"})
+    assert r.status_code == 200 and r.text == "777"

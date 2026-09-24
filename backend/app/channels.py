@@ -111,7 +111,11 @@ def _wa_signature_ok(settings, raw: bytes, header: str | None) -> bool:
 
 @router.get("/api/whatsapp/webhook", include_in_schema=False)
 def whatsapp_verify(request: Request):
-    s = _services().settings
+    # Lecture directe de la configuration, sans initialiser le moteur (base, modèle) : Meta attend une
+    # réponse immédiate, et un démarrage à froid Vercel prendrait plusieurs secondes.
+    from .config import get_settings
+
+    s = get_settings()
     p = request.query_params
     if (p.get("hub.mode") == "subscribe" and s.whatsapp_verify_token
             and hmac.compare_digest(p.get("hub.verify_token", ""), s.whatsapp_verify_token)):
