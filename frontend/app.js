@@ -284,7 +284,7 @@ $("#summary-btn").addEventListener("click", async () => {
       <h3>${esc(t("summary"))}</h3><p>${esc(r.summary)}</p>
       <h3>${esc(t("decisions"))} (${(r.decisions || []).length})</h3><ul>${(r.decisions || []).map((d) => `<li>${esc(d)}</li>`).join("") || `<li>${esc(t("no_decisions"))}</li>`}</ul>
       <h3>${esc(t("tasks"))} (${(r.tasks || []).length})</h3><ul>${tasks || `<li>${esc(t("no_tasks"))}</li>`}</ul>
-      <p class="mode">${r.mode === "extractive" ? esc(t("summary_extractive")) : esc(r.mode)}</p></div>`;
+      <p class="mode">${r.mode === "extractive" ? esc(t("summary_extractive")) : r.mode?.startsWith("llm:") ? t("mode_llm", esc(r.mode.slice(4))) : ""}</p></div>`;
   } catch (e) {
     $("#summary-result").innerHTML = `<p class="err">${esc(e.message)}</p>`;
   } finally { btn.disabled = false; }

@@ -106,7 +106,26 @@ Limites à connaître (hébergement serverless) :
 
 Sans LLM, le bot répond en **mode extractif** : il cite mot pour mot les messages/phrases pertinents.
 Avec un LLM, il rédige une réponse synthétique, toujours contrainte aux extraits et avec références `[1]`, `[2]`.
-Dans `.env` :
+
+#### Gemini (Google) — offre gratuite, recommandé pour la démo
+
+1. Créer une clé sur [Google AI Studio](https://aistudio.google.com) → *Get API key* (compte Google, pas de carte bancaire).
+2. Ajouter **une seule variable** (dans `.env`, ou sur Vercel : *Settings → Environment Variables*, puis redéployer) :
+   ```bash
+   GEMINI_API_KEY=AIza...        # GOOGLE_API_KEY est aussi accepté
+   # facultatif : LLM_MODEL=gemini-2.5-flash (par défaut) ou un autre modèle listé dans AI Studio
+   ```
+3. Le statut en haut de la page affiche alors `LLM : gemini:gemini-2.5-flash`.
+
+Ce que ça change : réponses rédigées en français **ou** en anglais, résumés rédigés, et la traduction des citations
+passe par Gemini (plus besoin de MyMemory). Si Gemini refuse (clé invalide, quota gratuit atteint), l'application
+revient automatiquement au mode extractif et affiche la raison sous la réponse.
+
+⚠️ Sur l'offre **gratuite**, Google peut utiliser les textes envoyés pour améliorer ses produits (voir les conditions
+de Google AI Studio). Parfait pour les données de démo ; pour de vraies conversations privées, préférer l'offre payante
+de Gemini, l'API Claude, ou Ollama en local.
+
+#### Autres fournisseurs
 
 ```bash
 # Anthropic

@@ -3,6 +3,7 @@ fonctionne en mode extractif (il cite directement les passages trouvés).
 
 Fournisseurs :
 - anthropic : ANTHROPIC_API_KEY
+- gemini    : GEMINI_API_KEY (Google AI Studio, offre gratuite), via l'API compatible OpenAI de Google
 - openai    : OPENAI_API_KEY (+ LLM_BASE_URL pour tout serveur compatible : Groq, Mistral, OpenRouter…)
 - ollama    : modèle local gratuit (LLM_BASE_URL par défaut http://localhost:11434/v1)
 """
@@ -16,8 +17,14 @@ from .config import Settings
 
 log = logging.getLogger(__name__)
 
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+# Les modèles Gemini 2.5 « réfléchissent » avant de répondre et ces tokens comptent dans max_tokens :
+# on ajoute une marge pour ne pas obtenir une réponse vide ou tronquée.
+GEMINI_THINKING_MARGIN = 3000
+
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5",
+    "gemini": "gemini-2.5-flash",
     "openai": "gpt-4o-mini",
     "ollama": "llama3.1",
 }
@@ -27,6 +34,19 @@ class LLMError(RuntimeError):
     pass
 
 
+def _error_message(r: httpx.Response) -> str:
+    """Message d'erreur lisible (Google renvoie [{"error": {...}}], OpenAI/Anthropic {"error": {...}})."""
+    try:
+        data = r.json()
+        if isinstance(data, list) and data:
+            data = data[0]
+        err = data.get("error", data)
+        msg = err.get("message") if isinstance(err, dict) else str(err)
+        return str(msg or r.text)[:300]
+    except ValueError:
+        return r.text[:300]
+
+
 class LLMClient:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -34,6 +54,8 @@ class LLMClient:
         if provider == "auto":
             if settings.anthropic_api_key:
                 provider = "anthropic"
+            elif settings.gemini_api_key:
+                provider = "gemini"
             elif settings.openai_api_key:
                 provider = "openai"
             else:
@@ -43,7 +65,7 @@ class LLMClient:
 
     @property
     def enabled(self) -> bool:
-        return self.provider in ("anthropic", "openai", "ollama")
+        return self.provider in ("anthropic", "gemini", "openai", "ollama")
 
     def describe(self) -> str:
         return f"{self.provider}:{self.model}" if self.enabled else "none"
@@ -57,6 +79,8 @@ class LLMClient:
             return self._openai_compatible(system, user, max_tokens)
         except httpx.HTTPError as exc:
             raise LLMError(f"Erreur d'appel au LLM ({self.provider}) : {exc}") from exc
+        except (KeyError, IndexError, TypeError, ValueError) as exc:  # réponse JSON inattendue
+            raise LLMError(f"Réponse inattendue du LLM ({self.provider}) : {exc!r}") from exc
 
     def _anthropic(self, system: str, user: str, max_tokens: int) -> str:
         base = self.settings.llm_base_url or "https://api.anthropic.com"
@@ -76,7 +100,7 @@ class LLMClient:
             timeout=self.settings.llm_timeout,
         )
         if r.status_code >= 400:
-            raise LLMError(f"Anthropic HTTP {r.status_code}: {r.text[:300]}")
+            raise LLMError(f"Anthropic HTTP {r.status_code}: {_error_message(r)}")
         data = r.json()
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
 
@@ -84,6 +108,10 @@ class LLMClient:
         if self.provider == "ollama":
             base = self.settings.llm_base_url or "http://localhost:11434/v1"
             headers = {}
+        elif self.provider == "gemini":
+            base = self.settings.llm_base_url or GEMINI_BASE_URL
+            headers = {"Authorization": f"Bearer {self.settings.gemini_api_key}"}
+            max_tokens += GEMINI_THINKING_MARGIN
         else:
             base = self.settings.llm_base_url or "https://api.openai.com/v1"
             headers = {"Authorization": f"Bearer {self.settings.openai_api_key}"}
@@ -99,5 +127,9 @@ class LLMClient:
             timeout=self.settings.llm_timeout,
         )
         if r.status_code >= 400:
-            raise LLMError(f"{self.provider} HTTP {r.status_code}: {r.text[:300]}")
-        return r.json()["choices"][0]["message"]["content"].strip()
+            raise LLMError(f"{self.provider} HTTP {r.status_code}: {_error_message(r)}")
+        choice = r.json()["choices"][0]
+        content = (choice.get("message") or {}).get("content") or ""
+        if not content.strip():
+            raise LLMError(f"{self.provider} : réponse vide (finish_reason={choice.get('finish_reason')})")
+        return content.strip()

@@ -87,6 +87,7 @@ class Settings:
     llm_timeout: float = field(default_factory=lambda: _float("LLM_TIMEOUT", 60))
     anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY", ""))
     openai_api_key: str = field(default_factory=lambda: _env("OPENAI_API_KEY", ""))
+    gemini_api_key: str = field(default_factory=lambda: _env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY"))
 
     # Traduction des citations (voir translate.py) : auto | llm | mymemory | none
     translation_provider: str = field(default_factory=lambda: _env("TRANSLATION_PROVIDER", "auto").lower())
