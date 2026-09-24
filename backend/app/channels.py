@@ -53,9 +53,13 @@ RECENT_EVENTS: deque = deque(maxlen=10)
 
 
 def _event(channel: str, status: str, sender: str = "", detail: str = "") -> None:
-    RECENT_EVENTS.appendleft({
-        "time": datetime.now(timezone.utc).strftime("%H:%M:%S UTC"), "channel": channel, "status": status,
-        "from": f"…{sender[-4:]}" if sender else "", "detail": detail[:200]})
+    ev = {"time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"), "channel": channel,
+          "status": status, "from": f"…{sender[-4:]}" if sender else "", "detail": detail[:200]}
+    RECENT_EVENTS.appendleft(ev)
+    try:  # en serverless, chaque requête peut tomber sur une instance différente : on garde aussi l'événement en base
+        _services().store.log_event(ev)
+    except Exception as exc:
+        log.warning("Journal d'événements non enregistré : %s", exc)
 
 
 def _services():

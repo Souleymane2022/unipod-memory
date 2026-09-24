@@ -140,6 +140,15 @@ class SummarizeRequest(BaseModel):
     lang: Optional[str] = Field(None, description="Langue du résumé rédigé par le LLM : fr ou en")
 
 
+def _recent_events(s) -> list:
+    try:
+        persisted = s.store.recent_events()
+    except Exception as exc:  # la base ne doit pas empêcher le statut de s'afficher
+        log.warning("Journal d'événements illisible : %s", exc)
+        persisted = None
+    return persisted if persisted is not None else list(RECENT_EVENTS)
+
+
 @app.get("/api/ping")
 def ping():
     """Répond sans initialiser la base ni le modèle : permet de vérifier que la fonction tourne."""
@@ -167,7 +176,7 @@ def health():
                                 "WHATSAPP_VERIFY_TOKEN_length": len(s.settings.whatsapp_verify_token),
                                 "WHATSAPP_ALLOWED_NUMBERS_count": len(s.settings.whatsapp_allowed_numbers)},
             # Derniers messages reçus par les webhooks (instance courante) : diagnostic sans accès aux logs
-            "recent_messages": list(RECENT_EVENTS),
+            "recent_messages": _recent_events(s),
             # Commit déployé (fourni par Vercel) : permet de vérifier quelle version tourne
             "version": (os.getenv("VERCEL_GIT_COMMIT_SHA") or "")[:7] or "local"}
 

@@ -176,6 +176,9 @@ def test_health_reports_whatsapp_config_without_secrets(client, wa):
 
 def test_recent_events_in_health(client, wa, monkeypatch):
     channels.RECENT_EVENTS.clear()
+    if main.services().store.kind == "postgres":  # journal persistant : repartir d'une table vide
+        with main.services().store._conn() as conn:
+            conn.execute(f"DELETE FROM {main.services().store.table}_events")
     monkeypatch.setattr(main.services().settings, "whatsapp_allowed_numbers", {"23566111111"})
     _post_wa(client, _wa_payload("aide", sender="23566000000", msg_id="e1"))
     _post_wa(client, _wa_payload("aide", sender="23566111111", msg_id="e2"))
@@ -183,3 +186,13 @@ def test_recent_events_in_health(client, wa, monkeypatch):
     statuses = [e["status"] for e in events]
     assert statuses[:3] == ["réponse_envoyée", "message_reçu", "numéro_non_autorisé"]
     assert events[2]["from"] == "…0000" and "23566000000" not in json.dumps(events)
+
+
+def test_events_persist_across_instances_with_postgres(client, wa, monkeypatch):
+    store = main.services().store
+    if store.kind != "postgres":
+        pytest.skip("journal persistant : propre au stockage PostgreSQL")
+    _post_wa(client, _wa_payload("aide", msg_id="persist-1"))
+    channels.RECENT_EVENTS.clear()  # autre instance serverless : mémoire vide
+    events = client.get("/api/health").json()["recent_messages"]
+    assert events and events[0]["status"] == "réponse_envoyée"

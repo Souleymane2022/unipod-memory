@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from .chunker import Chunk
 from .config import Settings
@@ -68,6 +69,8 @@ class PgVectorStore(BaseStore):
                     embedding vector({self.dim}) NOT NULL
                 )""")
             conn.execute(f"CREATE INDEX IF NOT EXISTS {self.table}_source_idx ON {self.table} (source)")
+            conn.execute(f"CREATE TABLE IF NOT EXISTS {self.table}_events "
+                         "(id BIGSERIAL PRIMARY KEY, event JSONB NOT NULL)")
 
     def reset(self) -> None:
         with self._conn() as conn:
@@ -127,6 +130,18 @@ class PgVectorStore(BaseStore):
         with self._conn() as conn:
             rows = conn.execute(f"SELECT {', '.join(META_COLUMNS)} FROM {self.table}").fetchall()
         return self._summarize_documents([dict(zip(META_COLUMNS, r)) for r in rows])
+
+    def log_event(self, event: dict[str, Any]) -> None:
+        with self._conn() as conn:
+            conn.execute(f"INSERT INTO {self.table}_events (event) VALUES (%s)", (Jsonb(event),))
+            conn.execute(f"DELETE FROM {self.table}_events WHERE id <= "
+                         f"(SELECT max(id) - 50 FROM {self.table}_events)")  # on ne garde que les 50 derniers
+
+    def recent_events(self, limit: int = 10) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(f"SELECT event FROM {self.table}_events ORDER BY id DESC LIMIT %s",
+                                (limit,)).fetchall()
+        return [r[0] for r in rows]
 
     def count(self) -> int:
         with self._conn() as conn:

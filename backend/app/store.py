@@ -74,6 +74,12 @@ class BaseStore:
         archive = Path(onnx.DOWNLOAD_PATH) / onnx.ARCHIVE_FILENAME
         archive.unlink(missing_ok=True)
 
+    def log_event(self, event: dict[str, Any]) -> None:
+        """Journal persistant des événements de messagerie (implémenté pour PostgreSQL)."""
+
+    def recent_events(self, limit: int = 10) -> list[dict[str, Any]] | None:
+        return None  # pas de journal persistant : l'appelant utilise le journal en mémoire
+
     @staticmethod
     def doc_id_for(source: str) -> str:
         return hashlib.sha1(source.encode("utf-8")).hexdigest()[:12]
