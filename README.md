@@ -13,7 +13,7 @@ et les **documents**, puis répond directement aux questions **en citant la sour
 |---|---|---|
 | ✅ | Ingestion `.txt` / `.md` / `.pdf` (API multipart, API texte JSON, CLI, interface web) | fait |
 | ✅ | Détection auto du type : chat (format `[AAAA-MM-JJ HH:MM] Nom: …` ou export WhatsApp), transcription (`[HH:MM:SS] Nom: …`), document | fait |
-| ✅ | Chunks de 300–500 mots, équilibrés, sans couper un message ; métadonnées source, date(s), auteur(s), type, titre | fait |
+| ✅ | Chunks de 300–500 mots, équilibrés (à un message près, car on ne coupe jamais un message ou une intervention) ; métadonnées source, date(s), auteur(s), type, titre | fait |
 | ✅ | Embeddings locaux gratuits (ONNX all-MiniLM-L6-v2 via ChromaDB) + base vectorielle ChromaDB persistante | fait |
 | ✅ | Q/R RAG : recherche hybride (vectorielle + lexicale pondérée IDF), citations avec auteur/date/heure exacts | fait |
 | ✅ | Garde-fou anti-hallucination : seuil de pertinence + réponse « information non disponible » | fait |
