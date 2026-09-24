@@ -178,6 +178,17 @@ Le bot ne peut pas lire un groupe WhatsApp en direct (limite de l'API) : pour al
    *Verify token* = la même phrase secrète → **Vérifier et enregistrer**, puis **s'abonner au champ `messages`**.
 5. Envoyer « aide » au numéro de test depuis un numéro autorisé.
 
+**Pièges rencontrés (vérifiés en conditions réelles)** — `GET /api/health` → `recent_messages` montre les derniers
+messages reçus/envoyés (journal stocké en base, numéros masqués) et permet de savoir où ça bloque :
+
+| Symptôme | Cause | Solution |
+|---|---|---|
+| Aucun événement dans `recent_messages` | app non **publiée**, ou app non abonnée au compte WhatsApp, ou champ `messages` non abonné | publier l'app (URL `/privacy` et `/data-deletion` exigées) ; Explorateur de l'API Graph : `POST <WABA_ID>/subscribed_apps` (token utilisateur) et `POST <APP_ID>/subscriptions?object=whatsapp_business_account&fields=messages&callback_url=…&verify_token=…` (token d'app) |
+| « Callback verification failed » / `Jeton de vérification invalide` | phrase différente de `WHATSAPP_VERIFY_TOKEN` | tester `…/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=<phrase>&hub.challenge=12345` → doit afficher `12345` |
+| `signature_invalide` | `WHATSAPP_APP_SECRET` mal copié | recopier la clé secrète (ou retirer la variable le temps de tester) |
+| `erreur_envoi` **131030** | numéro de test : destinataire non autorisé | l'ajouter dans *Étape 1. Faites un essai → Destinataire* (5 numéros max) |
+| `erreur_envoi` **401 / 190** | token expiré (24 h) | régénérer le token, mettre à jour `WHATSAPP_TOKEN`, redéployer |
+
 ⚠️ Le jeton affiché dans *API Setup* expire au bout de 24 h : pour une utilisation durable, créer un
 *utilisateur système* dans Meta Business Suite et générer un jeton permanent. `WHATSAPP_ALLOWED_NUMBERS` limite
 l'accès à certains numéros. Tarifs : répondre à un utilisateur qui écrit en premier est en général gratuit
