@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from .chunker import chunk_document
 from .config import ROOT_DIR, get_settings
+from .channels import router as channels_router
 from .i18n import DEFAULT_LANG, msg, normalize_lang
 from .insights import summarize
 from .llm import LLMClient
@@ -113,6 +114,7 @@ app = FastAPI(
     version="1.0.0",
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(channels_router)
 
 
 class AskRequest(BaseModel):
@@ -153,6 +155,8 @@ def health():
             "embeddings": s.settings.embedding_backend, "store": s.store.kind,
             "ephemeral_storage": s.store.ephemeral,
             "translation": s.translator.provider,
+            "channels": {"whatsapp": bool(s.settings.whatsapp_token and s.settings.whatsapp_phone_number_id),
+                         "telegram": bool(s.settings.telegram_bot_token)},
             # Commit déployé (fourni par Vercel) : permet de vérifier quelle version tourne
             "version": (os.getenv("VERCEL_GIT_COMMIT_SHA") or "")[:7] or "local"}
 

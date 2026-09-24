@@ -16,6 +16,8 @@ def _ask(client, question, lang=None):
 def test_detect_lang():
     assert detect_lang("What is the deadline to submit projects?") == "en"
     assert detect_lang("Quelle est la date limite de dépôt ?") == "fr"
+    assert detect_lang("Hello") == "en" and detect_lang("Thanks!") == "en"
+    assert detect_lang("Bonjour") == "fr" and detect_lang("Salut") == "fr"
 
 
 @pytest.mark.parametrize("question,source,expected", [

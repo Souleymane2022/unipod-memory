@@ -2,7 +2,6 @@
 from backend.app import main
 from backend.app.llm import LLMClient, LLMError
 from backend.app.rag import NOT_FOUND_MARKER
-from backend.app.telegram_bot import handle
 
 
 def _with_fake_llm(monkeypatch, reply):
@@ -48,11 +47,3 @@ def test_llm_provider_auto_detection(monkeypatch):
     assert not LLMClient(s).enabled
     s.openai_api_key = "sk-test"
     assert LLMClient(s).provider == "openai"
-
-
-def test_telegram_handler(client):
-    api = client  # TestClient est un httpx.Client
-    reply = handle("Comment réserver une machine du fablab ?", api)
-    assert "48 heures" in reply and "guide_fablab_unipod.md" in reply
-    assert "Décisions" in handle("/resume reunion_mensuelle_2026-09-15.txt", api)
-    assert "UniPods Memory" in handle("/start", api)

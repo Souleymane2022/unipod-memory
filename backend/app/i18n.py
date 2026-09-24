@@ -75,7 +75,8 @@ _FR_MARKERS = set(
 )
 _EN_MARKERS = set(
     "the a an and is are was were for in on with that which what who whom how when where why "
-    "do does did we you they this these those of to be been have has can will".split()
+    "do does did we you they this these those of to be been have has can will "
+    "hello hi hey thanks thank please i my me your yes morning evening there".split()
 )
 _TOKEN_RE = re.compile(r"[a-zA-ZÀ-ÿ']+")
 

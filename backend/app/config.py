@@ -115,6 +115,18 @@ class Settings:
 
     # Bot Telegram (optionnel)
     telegram_bot_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN", ""))
+    # Mode webhook (Vercel) : secret partagé avec Telegram, et clé de /api/telegram/setup
+    telegram_webhook_secret: str = field(default_factory=lambda: _env("TELEGRAM_WEBHOOK_SECRET"))
+
+    # WhatsApp Cloud API (Meta) — voir channels.py
+    whatsapp_token: str = field(default_factory=lambda: _env("WHATSAPP_TOKEN"))
+    whatsapp_phone_number_id: str = field(default_factory=lambda: _env("WHATSAPP_PHONE_NUMBER_ID"))
+    whatsapp_verify_token: str = field(default_factory=lambda: _env("WHATSAPP_VERIFY_TOKEN"))
+    whatsapp_app_secret: str = field(default_factory=lambda: _env("WHATSAPP_APP_SECRET"))
+    whatsapp_api_version: str = field(default_factory=lambda: _env("WHATSAPP_API_VERSION", "v23.0"))
+    # Facultatif : numéros autorisés (format international sans +, séparés par des virgules)
+    whatsapp_allowed_numbers: set = field(default_factory=lambda: {
+        "".join(c for c in n if c.isdigit()) for n in _env("WHATSAPP_ALLOWED_NUMBERS").split(",") if n.strip()})
     api_url: str = field(default_factory=lambda: _env("API_URL", "http://localhost:8000"))
 
 

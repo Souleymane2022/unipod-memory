@@ -19,9 +19,9 @@ et les **documents**, puis répond directement aux questions **en citant la sour
 | ✅ | Garde-fou anti-hallucination : seuil de pertinence + réponse « information non disponible » | fait |
 | ✅ | Génération par LLM **optionnelle** (Anthropic, OpenAI ou compatible, Ollama local) ; sinon mode extractif | fait |
 | ✅ | Interface web (Q/R, ajout/suppression de documents, résumé) | fait |
+| 🟡 | **Chatbot WhatsApp** (API Cloud officielle de Meta, webhook signé) et **Telegram** (webhook Vercel ou long polling) — testés avec des messages simulés, pas encore avec les vrais services | fait, à valider |
 | ✅ | **Bilingue français / anglais** : interface FR/EN, réponses dans la langue choisie, questions en anglais sur des sources en français (et inversement) | fait |
 | ✅ | **Bonus** : résumé d'une conversation/réunion + décisions + tâches (responsable, échéance) | fait |
-| 🟡 | **Bonus** : bot Telegram (long polling) — logique testée, pas testé contre un vrai bot (pas de token) | fait, à valider |
 
 ## Architecture
 
@@ -40,9 +40,11 @@ et les **documents**, puis répond directement aux questions **en citant la sour
     textutils.py     mots-clés, racinisation FR, IDF, découpage en phrases
     i18n.py          messages FR/EN, détection de langue, lexique bilingue pour la recherche inter-langues
     translate.py     traduction des citations (LLM ou MyMemory gratuit), repli sur le texte original
-    telegram_bot.py  bot Telegram optionnel
+    channels.py      webhooks WhatsApp (Meta Cloud API) et Telegram
+    messaging.py     commandes et mise en forme communes aux messageries
+    telegram_bot.py  bot Telegram en long polling (hors Vercel)
   scripts/ingest_folder.py   indexation d'un dossier en ligne de commande
-  tests/             100 tests pytest (API sur ChromaDB et PostgreSQL, parsing, PDF/docx/odt/html, anti-hallucination, bilinguisme,
+  tests/             118 tests pytest (API sur ChromaDB et PostgreSQL, parsing, PDF/docx/odt/html, anti-hallucination, bilinguisme,
                      traduction simulée, LLM simulé, bot)
 /data
   samples/           jeu de démo : chat du groupe, transcription de réunion, guide du fablab
@@ -159,11 +161,37 @@ LLM_PROVIDER=ollama  LLM_MODEL=llama3.1
 
 Si l'appel au LLM échoue (quota, réseau), l'API bascule automatiquement en mode extractif et renvoie un `warning`.
 
+### Chatbot WhatsApp (optionnel, API officielle de Meta)
+
+Les membres écrivent au numéro WhatsApp du bot et reçoivent la réponse citée (FR/EN), comme sur le site.
+Commandes : `aide`, `documents`, `résumé <nom du fichier>` (un morceau du nom suffit), ou une question libre.
+Le bot ne peut pas lire un groupe WhatsApp en direct (limite de l'API) : pour alimenter la mémoire,
+*Exporter la discussion* du groupe (sans médias) et envoyer le `.txt` dans l'onglet « Ajouter des documents ».
+
+1. Sur [developers.facebook.com](https://developers.facebook.com) : *Créer une app* → type **Business** → ajouter le produit **WhatsApp**.
+2. Dans *WhatsApp → API Setup* : noter le **Phone number ID**, générer un **access token**, et ajouter
+   (jusqu'à 5) numéros destinataires de test. Meta fournit un numéro de test gratuit.
+3. Dans Vercel → *Environment Variables* : `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`,
+   `WHATSAPP_VERIFY_TOKEN` (une phrase secrète de votre choix), `WHATSAPP_APP_SECRET`
+   (*Paramètres de l'app → Général → Clé secrète*), puis **redéployer**.
+4. Dans *WhatsApp → Configuration → Webhook* : URL `https://<votre-site>/api/whatsapp/webhook`,
+   *Verify token* = la même phrase secrète → **Vérifier et enregistrer**, puis **s'abonner au champ `messages`**.
+5. Envoyer « aide » au numéro de test depuis un numéro autorisé.
+
+⚠️ Le jeton affiché dans *API Setup* expire au bout de 24 h : pour une utilisation durable, créer un
+*utilisateur système* dans Meta Business Suite et générer un jeton permanent. `WHATSAPP_ALLOWED_NUMBERS` limite
+l'accès à certains numéros. Tarifs : répondre à un utilisateur qui écrit en premier est en général gratuit
+(voir la grille tarifaire actuelle de Meta).
+
 ### Bot Telegram (optionnel)
 
-1. Créer un bot avec @BotFather, mettre `TELEGRAM_BOT_TOKEN=...` dans `.env`.
-2. L'API doit tourner, puis : `python -m backend.app.telegram_bot`
-3. Dans Telegram : poser une question, `/documents`, `/resume reunion_mensuelle_2026-09-15.txt`.
+**Sur Vercel (webhook)** :
+1. Créer un bot avec [@BotFather](https://t.me/BotFather) (`/newbot`) et copier son jeton.
+2. Dans Vercel : `TELEGRAM_BOT_TOKEN` et `TELEGRAM_WEBHOOK_SECRET` (phrase secrète de votre choix, lettres/chiffres), redéployer.
+3. Ouvrir **une fois** `https://<votre-site>/api/telegram/setup?key=<TELEGRAM_WEBHOOK_SECRET>` : le bot est actif.
+
+**Sur un PC ou serveur classique (long polling)** : `TELEGRAM_BOT_TOKEN=... python -m backend.app.telegram_bot`.
+Mêmes commandes que WhatsApp (`/aide`, `/documents`, `/resume <fichier>` ou une question).
 
 ## Ajouter de nouveaux documents
 
@@ -286,7 +314,7 @@ multilingue (`EMBEDDING_BACKEND=sentence-transformers`, hors Vercel).
 
 ## Bilan
 
-**Ce qui fonctionne** (vérifié par 100 tests automatisés, dont toute la suite d'API sur ChromaDB **et** PostgreSQL, des appels HTTP réels et un test navigateur de l'interface) :
+**Ce qui fonctionne** (vérifié par 118 tests automatisés, dont toute la suite d'API sur ChromaDB **et** PostgreSQL, des appels HTTP réels et un test navigateur de l'interface) :
 ingestion txt/md/pdf avec métadonnées, découpage 300–500 mots, ChromaDB persistant, Q/R avec citations exactes
 (auteur, date, heure, extrait), refus honnête quand l'information manque, interface web complète,
 résumé + décisions + tâches, interface et réponses en français et en anglais, fonctionnement 100 % gratuit et hors ligne (hors téléchargement initial du modèle).
