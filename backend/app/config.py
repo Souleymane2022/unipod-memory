@@ -127,6 +127,8 @@ class Settings:
     # Facultatif : numéros autorisés (format international sans +, séparés par des virgules)
     whatsapp_allowed_numbers: set = field(default_factory=lambda: {
         "".join(c for c in n if c.isdigit()) for n in _env("WHATSAPP_ALLOWED_NUMBERS").split(",") if n.strip()})
+    # Contact affiché sur /privacy et /data-deletion (exigé par Meta pour publier l'app WhatsApp)
+    contact_email: str = field(default_factory=lambda: _env("CONTACT_EMAIL"))
     api_url: str = field(default_factory=lambda: _env("API_URL", "http://localhost:8000"))
 
 

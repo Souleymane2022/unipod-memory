@@ -4,6 +4,7 @@ Lancement (depuis la racine du dépôt) :  uvicorn backend.app.main:app --reload
 """
 from __future__ import annotations
 
+import html
 import logging
 import os
 import threading
@@ -12,7 +13,7 @@ from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -33,6 +34,7 @@ log = logging.getLogger("unipods")
 ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".odt", ".html", ".htm", ".log", ".csv"}
 FRONTEND_DIR = ROOT_DIR / "frontend"
 SAMPLES_DIR = ROOT_DIR / "data" / "samples"
+LEGAL_UPDATED = "2026-09-24"
 
 
 class Services:
@@ -227,3 +229,21 @@ if FRONTEND_DIR.exists():
     @app.get("/", include_in_schema=False)
     def index():
         return FileResponse(FRONTEND_DIR / "index.html")
+
+    def _legal_page(name: str) -> HTMLResponse:
+        """Pages exigées par Meta pour publier l'app WhatsApp (confidentialité, suppression des données)."""
+        contact = get_settings().contact_email
+        contact_html = (f'<a href="mailto:{html.escape(contact)}">{html.escape(contact)}</a>' if contact
+                        else "les organisateurs de la communauté UniPod / the UniPod community organisers")
+        page = (FRONTEND_DIR / name).read_text(encoding="utf-8")
+        return HTMLResponse(page.replace("{{CONTACT}}", contact_html).replace("{{UPDATED}}", LEGAL_UPDATED))
+
+    @app.get("/privacy", include_in_schema=False)
+    @app.get("/confidentialite", include_in_schema=False)
+    def privacy():
+        return _legal_page("privacy.html")
+
+    @app.get("/data-deletion", include_in_schema=False)
+    @app.get("/suppression-donnees", include_in_schema=False)
+    def data_deletion():
+        return _legal_page("data-deletion.html")

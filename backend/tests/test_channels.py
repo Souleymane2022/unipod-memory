@@ -155,3 +155,13 @@ def test_webhook_never_fails_on_network_or_engine_errors(client, wa, monkeypatch
     monkeypatch.setattr(channels, "reply", boom)
     assert _post_wa(client, _wa_payload("question", msg_id="n2")).status_code == 200
     assert "Désolé" in sent[-1]["text"]["body"]
+
+
+def test_legal_pages_for_meta(client, monkeypatch):
+    for path in ("/privacy", "/confidentialite", "/data-deletion", "/suppression-donnees"):
+        r = client.get(path)
+        assert r.status_code == 200 and "UniPods Memory" in r.text and "{{" not in r.text
+    assert "Privacy Policy" in client.get("/privacy").text and "Politique de confidentialité" in client.get("/privacy").text
+    monkeypatch.setattr(main.services().settings, "contact_email", "contact@example.org")
+    monkeypatch.setattr("backend.app.main.get_settings", lambda: main.services().settings)
+    assert 'mailto:contact@example.org' in client.get("/data-deletion").text
