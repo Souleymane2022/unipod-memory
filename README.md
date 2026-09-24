@@ -81,6 +81,23 @@ uvicorn backend.app.main:app --reload --port 8000
 
 Tests : `python -m pytest backend/tests -q`
 
+### Déployer sur Vercel
+
+Le dépôt est prêt pour Vercel (préréglage **FastAPI**, répertoire racine `./`) :
+`pyproject.toml` déclare le point d'entrée (`[tool.vercel] entrypoint = "backend.app.main:app"`) et les dépendances.
+⚠️ Vercel lit `pyproject.toml` et **ignore `requirements.txt`** : garder les deux listes synchronisées.
+
+Quand la variable `VERCEL` est présente, l'application s'adapte automatiquement :
+- base ChromaDB, fichiers envoyés et modèle d'embedding stockés dans `/tmp/unipods` (seul dossier inscriptible) ;
+- le jeu de démo `data/samples` est **indexé automatiquement** à chaque démarrage à froid (`AUTO_SEED=1`).
+
+Limites à connaître (hébergement serverless) :
+- **stockage temporaire** : un document ajouté via l'interface peut disparaître au redémarrage d'une instance,
+  et deux instances ne partagent pas la même base. Pour une mémoire durable, ajoutez les fichiers dans
+  `data/samples/` et redéployez, ou hébergez le backend sur un service avec disque persistant (Render, Railway, Fly.io…) ;
+- **premier appel lent** (démarrage à froid) : installation des dépendances restantes + téléchargement du modèle (~80 Mo) + indexation ;
+- les clés LLM éventuelles se déclarent dans *Settings → Environment Variables* du projet Vercel.
+
 ### Activer un LLM (optionnel)
 
 Sans LLM, le bot répond en **mode extractif** : il cite mot pour mot les messages/phrases pertinents.
