@@ -112,6 +112,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, examples=["Quelle est la date limite de dépôt des projets ?"])
     top_k: Optional[int] = Field(None, ge=1, le=10)
+    lang: Optional[str] = Field(None, description="Langue de la réponse : fr ou en (défaut : langue de la question)")
 
 
 class TextIngestRequest(BaseModel):
@@ -125,6 +126,7 @@ class TextIngestRequest(BaseModel):
 class SummarizeRequest(BaseModel):
     source: Optional[str] = Field(None, description="Nom d'un document déjà indexé")
     text: Optional[str] = Field(None, description="Ou texte brut à résumer")
+    lang: Optional[str] = Field(None, description="Langue du résumé rédigé par le LLM : fr ou en")
 
 
 @app.get("/api/ping")
@@ -170,7 +172,7 @@ def ingest_text(req: TextIngestRequest):
 
 @app.post("/api/ask")
 def ask(req: AskRequest):
-    return services().rag.answer(req.question, req.top_k)
+    return services().rag.answer(req.question, req.top_k, req.lang)
 
 
 @app.get("/api/documents")
@@ -198,7 +200,7 @@ def summarize_endpoint(req: SummarizeRequest):
         text, source = "\n".join(c["text"] for c in chunks), req.source
     else:
         raise HTTPException(400, "Fournir 'source' ou 'text'")
-    result = summarize(text, s.llm)
+    result = summarize(text, s.llm, req.lang)
     result["source"] = source
     return result
 

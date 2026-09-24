@@ -18,16 +18,18 @@ from .config import get_settings
 log = logging.getLogger("unipods.telegram")
 HELP = (
     "Je suis UniPods Memory 🧠 : posez-moi une question sur les messages du groupe, les réunions "
-    "ou les documents, je réponds en citant mes sources.\n\n"
-    "• /resume <fichier> : résumé, décisions et tâches d'une conversation ou d'une réunion\n"
-    "• /documents : liste des sources indexées"
+    "ou les documents, je réponds en citant mes sources.\n"
+    "I'm UniPods Memory 🧠: ask me about the group's messages, meetings or documents, in French or English — "
+    "I answer with sources.\n\n"
+    "• /resume <fichier|file> : résumé, décisions et tâches / summary, decisions and tasks\n"
+    "• /documents : sources indexées / indexed sources"
 )
 
 
 def format_answer(r: dict) -> str:
     lines = [r["answer"]]
     if r.get("sources"):
-        lines.append("\n📚 Sources :")
+        lines.append("\n📚 Sources:")
         for s in r["sources"]:
             meta = " · ".join(x for x in [s.get("cited_date"), s.get("timestamp"), s.get("cited_author")] if x)
             lines.append(f"[{s['ref']}] {s['source']} ({meta})")

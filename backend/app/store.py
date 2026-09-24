@@ -97,17 +97,23 @@ class VectorStore:
         return {"source": doc.source, "doc_id": doc_id, "doc_type": doc.doc_type, "chunks": len(ids),
                 "replaced_chunks": replaced}
 
-    def query(self, text: str, n: int) -> list[dict[str, Any]]:
+    def query(self, texts: str | list[str], n: int) -> list[dict[str, Any]]:
+        """Plus proches voisins ; avec plusieurs requêtes, garde la meilleure similarité par chunk."""
         count = self.collection.count()
         if count == 0:
             return []
+        texts = [texts] if isinstance(texts, str) else texts
         res = self.collection.query(
-            query_texts=[text], n_results=min(n, count), include=["documents", "metadatas", "distances"]
+            query_texts=texts, n_results=min(n, count), include=["documents", "metadatas", "distances"]
         )
-        hits = []
-        for id_, doc, meta, dist in zip(res["ids"][0], res["documents"][0], res["metadatas"][0], res["distances"][0]):
-            hits.append({"id": id_, "text": doc, "metadata": meta, "similarity": 1.0 - float(dist)})
-        return hits
+        hits: dict[str, dict[str, Any]] = {}
+        for q in range(len(texts)):
+            for id_, doc, meta, dist in zip(res["ids"][q], res["documents"][q], res["metadatas"][q],
+                                            res["distances"][q]):
+                sim = 1.0 - float(dist)
+                if id_ not in hits or sim > hits[id_]["similarity"]:
+                    hits[id_] = {"id": id_, "text": doc, "metadata": meta, "similarity": sim}
+        return sorted(hits.values(), key=lambda h: h["similarity"], reverse=True)
 
     def get_source_chunks(self, source: str) -> list[dict[str, Any]]:
         res = self.collection.get(where={"source": source}, include=["documents", "metadatas"])

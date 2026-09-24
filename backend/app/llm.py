@@ -46,7 +46,7 @@ class LLMClient:
         return self.provider in ("anthropic", "openai", "ollama")
 
     def describe(self) -> str:
-        return f"{self.provider}:{self.model}" if self.enabled else "none (mode extractif)"
+        return f"{self.provider}:{self.model}" if self.enabled else "none"
 
     def complete(self, system: str, user: str, max_tokens: int = 800) -> str:
         if not self.enabled:

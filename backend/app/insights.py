@@ -11,6 +11,7 @@ import re
 from collections import Counter
 from typing import Any
 
+from .i18n import DEFAULT_LANG, normalize_lang
 from .llm import LLMClient, LLMError
 from .textutils import keywords, split_sentences
 
@@ -36,10 +37,11 @@ DEADLINE_RE = re.compile(
 )
 
 SUMMARY_PROMPT = """Tu analyses une conversation de groupe ou une transcription de réunion d'une communauté UniPod.
+Rédige tout le contenu en {language}.
 Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, de la forme :
-{"summary": "résumé en 3 à 6 phrases, en français",
+{{"summary": "résumé en 3 à 6 phrases",
  "decisions": ["décision 1", "..."],
- "tasks": [{"task": "...", "owner": "personne ou vide", "deadline": "échéance ou vide"}]}
+ "tasks": [{{"task": "...", "owner": "personne ou vide", "deadline": "échéance ou vide"}}]}}
 N'invente rien : n'utilise que le contenu fourni."""
 
 
@@ -112,11 +114,14 @@ def _extractive(text: str, max_sentences: int = 5) -> dict[str, Any]:
     return {"summary": summary, "decisions": decisions, "tasks": tasks, "participants": participants}
 
 
-def summarize(text: str, llm: LLMClient) -> dict[str, Any]:
+def summarize(text: str, llm: LLMClient, lang: str | None = None) -> dict[str, Any]:
+    """Sans LLM, le résumé reprend des phrases de la source (donc dans sa langue d'origine)."""
+    lang = normalize_lang(lang) or DEFAULT_LANG
     base = _extractive(text)
     if llm.enabled:
         try:
-            raw = llm.complete(SUMMARY_PROMPT, text[:60000], max_tokens=1500)
+            language = "anglais (English)" if lang == "en" else "français"
+            raw = llm.complete(SUMMARY_PROMPT.format(language=language), text[:60000], max_tokens=1500)
             m = re.search(r"\{.*\}", raw, re.DOTALL)
             data = json.loads(m.group(0) if m else raw)
             return {

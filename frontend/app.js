@@ -1,11 +1,120 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const TYPE_LABEL = { chat: "Messages", transcript: "Réunion", document: "Document" };
+
+// ---- traductions (FR / EN)
+const I18N = {
+  fr: {
+    tagline: "La mémoire collective du groupe : messages, réunions et documents.",
+    tab_ask: "Poser une question", tab_ingest: "Ajouter des documents", tab_summary: "Résumé & décisions",
+    welcome: "Bonjour ! Posez-moi une question sur ce qui s'est dit dans le groupe, en réunion ou dans les documents. Je réponds uniquement à partir des sources indexées et je les cite. Vous pouvez écrire en français ou en anglais.",
+    examples: [
+      "Quelle est la date limite de dépôt des projets pour le hackathon ?",
+      "Qu'est-ce qui a été décidé pour l'imprimante 3D pendant la réunion ?",
+      "Comment réserver une machine du fablab ?",
+      "Quel est le salaire du directeur de l'UniPod ?",
+    ],
+    placeholder: "Ex. : Quand a lieu la prochaine réunion ?", ask_btn: "Demander",
+    searching: "Recherche dans la mémoire du groupe…",
+    mode_extractive: "Mode extractif (sans LLM) : citations directes des sources.",
+    mode_llm: (m) => `Réponse rédigée par ${m} à partir des sources.`,
+    passage: "passage",
+    type: { chat: "Messages", transcript: "Réunion", document: "Document" },
+    ingest_title: "Ajouter des fichiers",
+    ingest_hint: "Formats : .txt, .md, .pdf. Exports de chat (<code>[2026-09-08 09:12] Nom: message</code> ou WhatsApp), transcriptions (<code>[00:04:05] Nom: texte</code>) et documents sont détectés automatiquement. Un fichier du même nom remplace l'ancienne version.",
+    f_type: "Type", f_author: "Auteur (optionnel)", f_date: "Date (optionnel)",
+    t_auto: "Détection automatique", t_chat: "Messages (chat)", t_transcript: "Transcription de réunion", t_document: "Document",
+    index_btn: "Indexer", indexing: "Indexation en cours…",
+    ingested: (d, type) => `✔ ${d.source} — ${type}, ${d.chunks} passage(s) (${d.chunk_words.join(", ")} mots)`,
+    docs_title: "Documents indexés",
+    th: ["Source", "Type", "Dates", "Auteurs", "Passages", ""],
+    delete: "Supprimer", delete_title: "Retirer de la mémoire", confirm_delete: (s) => `Retirer ${s} de la mémoire ?`,
+    no_docs: "Aucun document. Ajoutez-en ci-dessus.",
+    summary_title: "Résumé automatique",
+    summary_hint: "Choisissez une conversation ou une réunion : résumé, décisions et tâches extraites.",
+    summary_btn: "Résumer", analysing: "Analyse en cours…", participants: "Participants",
+    summary: "Résumé", decisions: "Décisions", tasks: "Tâches / actions",
+    no_decisions: "Aucune décision détectée.", no_tasks: "Aucune tâche détectée.",
+    summary_extractive: "Mode extractif (heuristiques, sans LLM) : les phrases sont citées dans leur langue d'origine.",
+    status_ok: (h) => `${h.chunks} passages indexés · LLM : ${h.llm === "none" ? "aucun (mode extractif)" : h.llm}` + (h.ephemeral_storage ? " · stockage temporaire (démo)" : ""),
+    status_ephemeral: "Hébergement serverless : les documents ajoutés peuvent disparaître au redémarrage. Le jeu de démo est réindexé automatiquement.",
+    status_error: "Erreur serveur : ", status_starting: (n) => `Démarrage du serveur… (${n}/12)`,
+    status_down: (m) => `API injoignable (${m}). Ouvrez /api/health pour le détail.`,
+    http_error: (s) => `Erreur HTTP ${s}`,
+  },
+  en: {
+    tagline: "The group's collective memory: messages, meetings and documents.",
+    tab_ask: "Ask a question", tab_ingest: "Add documents", tab_summary: "Summary & decisions",
+    welcome: "Hello! Ask me anything about what was said in the group, in meetings or in documents. I only answer from the indexed sources and I cite them. You can write in English or French.",
+    examples: [
+      "What is the deadline to submit hackathon projects?",
+      "What was decided about the 3D printer during the meeting?",
+      "How do I book a fablab machine?",
+      "What is the director's salary?",
+    ],
+    placeholder: "E.g.: When is the next meeting?", ask_btn: "Ask",
+    searching: "Searching the group's memory…",
+    mode_extractive: "Extractive mode (no LLM): direct quotes from the sources.",
+    mode_llm: (m) => `Answer written by ${m} from the sources.`,
+    passage: "passage",
+    type: { chat: "Messages", transcript: "Meeting", document: "Document" },
+    ingest_title: "Add files",
+    ingest_hint: "Formats: .txt, .md, .pdf. Chat exports (<code>[2026-09-08 09:12] Name: message</code> or WhatsApp), transcripts (<code>[00:04:05] Name: text</code>) and documents are detected automatically. A file with the same name replaces the previous version.",
+    f_type: "Type", f_author: "Author (optional)", f_date: "Date (optional)",
+    t_auto: "Automatic detection", t_chat: "Messages (chat)", t_transcript: "Meeting transcript", t_document: "Document",
+    index_btn: "Index", indexing: "Indexing…",
+    ingested: (d, type) => `✔ ${d.source} — ${type}, ${d.chunks} passage(s) (${d.chunk_words.join(", ")} words)`,
+    docs_title: "Indexed documents",
+    th: ["Source", "Type", "Dates", "Authors", "Passages", ""],
+    delete: "Delete", delete_title: "Remove from memory", confirm_delete: (s) => `Remove ${s} from memory?`,
+    no_docs: "No documents yet. Add some above.",
+    summary_title: "Automatic summary",
+    summary_hint: "Pick a conversation or a meeting: summary, decisions and extracted tasks.",
+    summary_btn: "Summarize", analysing: "Analysing…", participants: "Participants",
+    summary: "Summary", decisions: "Decisions", tasks: "Tasks / actions",
+    no_decisions: "No decision detected.", no_tasks: "No task detected.",
+    summary_extractive: "Extractive mode (heuristics, no LLM): sentences are quoted in their original language.",
+    status_ok: (h) => `${h.chunks} passages indexed · LLM: ${h.llm === "none" ? "none (extractive mode)" : h.llm}` + (h.ephemeral_storage ? " · temporary storage (demo)" : ""),
+    status_ephemeral: "Serverless hosting: uploaded documents may disappear on restart. The demo dataset is re-indexed automatically.",
+    status_error: "Server error: ", status_starting: (n) => `Starting server… (${n}/12)`,
+    status_down: (m) => `API unreachable (${m}). Open /api/health for details.`,
+    http_error: (s) => `HTTP error ${s}`,
+  },
+};
+
+function initialLang() {
+  try {
+    const saved = localStorage.getItem("lang");
+    if (saved === "fr" || saved === "en") return saved;
+  } catch { /* stockage indisponible */ }
+  return (navigator.language || "fr").toLowerCase().startsWith("fr") ? "fr" : "en";
+}
+let lang = initialLang();
+const t = (key, ...args) => { const v = I18N[lang][key]; return typeof v === "function" ? v(...args) : v; };
+const typeLabel = (type) => I18N[lang].type[type] || type;
+
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-html]").forEach((el) => { el.innerHTML = t(el.dataset.i18nHtml); });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll("#docs thead th").forEach((th, i) => { th.textContent = t("th")[i]; });
+  $("#examples").innerHTML = t("examples").map((q) => `<button class="chip" type="button">${esc(q)}</button>`).join("");
+  document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => ask(c.textContent)));
+  document.querySelectorAll(".lang-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
+  if (lastHealth) renderStatus(lastHealth);
+  loadDocuments();
+}
+
+document.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", () => {
+  lang = b.dataset.lang;
+  try { localStorage.setItem("lang", lang); } catch { /* ignoré */ }
+  applyLang();
+}));
 
 async function api(path, opts = {}) {
   const res = await fetch(path, opts);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || `Erreur HTTP ${res.status}`);
+  if (!res.ok) throw new Error(data.detail || t("http_error", res.status));
   return data;
 }
 
@@ -18,21 +127,28 @@ document.querySelectorAll(".tab").forEach((btn) =>
   })
 );
 
+// ---- statut
+let lastHealth = null;
+function renderStatus(h) {
+  const st = $("#status");
+  st.textContent = t("status_ok", h);
+  st.title = h.ephemeral_storage ? t("status_ephemeral") : "";
+  st.classList.remove("err");
+}
+
 async function loadStatus(attempt = 0) {
   const st = $("#status");
   try {
     const res = await fetch("/api/health");
     const h = await res.json().catch(() => null);
     if (res.ok && h) {
-      st.textContent = `${h.chunks} passages indexés · LLM : ${h.llm}` + (h.ephemeral_storage ? " · stockage temporaire (démo)" : "");
-      st.title = h.ephemeral_storage
-        ? "Hébergement serverless : les documents ajoutés peuvent disparaître au redémarrage. Le jeu de démo est réindexé automatiquement." : "";
-      st.classList.remove("err");
+      lastHealth = h;
+      renderStatus(h);
       if (attempt > 0) loadDocuments();
       return;
     }
     if (h && h.detail) {  // erreur d'initialisation renvoyée par le serveur
-      st.textContent = "Erreur serveur : " + h.detail;
+      st.textContent = t("status_error") + h.detail;
       st.classList.add("err");
       return;
     }
@@ -40,10 +156,10 @@ async function loadStatus(attempt = 0) {
   } catch (e) {
     // Démarrage à froid (serverless) : installation, téléchargement du modèle… on réessaie.
     if (attempt < 12) {
-      st.textContent = `Démarrage du serveur… (${attempt + 1}/12)`;
+      st.textContent = t("status_starting", attempt + 1);
       setTimeout(() => loadStatus(attempt + 1), 5000);
     } else {
-      st.textContent = `API injoignable (${e.message}). Ouvrez /api/health pour le détail.`;
+      st.textContent = t("status_down", e.message);
       st.classList.add("err");
     }
   }
@@ -63,25 +179,25 @@ function renderAnswer(r) {
   const sources = (r.sources || []).map((s) => `
     <div class="source">
       <div class="meta">[${s.ref}] <strong>${esc(s.source)}</strong>
-        <span class="badge">${esc(TYPE_LABEL[s.doc_type] || s.doc_type)}</span>
+        <span class="badge">${esc(typeLabel(s.doc_type))}</span>
         ${s.cited_author ? ` · ${esc(s.cited_author)}` : ""}
         ${s.cited_date ? ` · ${esc(s.cited_date)}` : ""}${s.timestamp ? ` ${esc(s.timestamp)}` : ""}
-        · passage ${esc(s.chunk)}</div>
+        · ${t("passage")} ${esc(s.chunk)}</div>
       <div class="excerpt">« ${esc(s.excerpt)} »</div>
     </div>`).join("");
-  const mode = r.mode === "extractive" ? "Mode extractif (sans LLM) : citations directes des sources." :
-               r.mode && r.mode.startsWith("llm") ? `Réponse rédigée par ${esc(r.mode.slice(4))} à partir des sources.` : "";
+  const mode = r.mode === "extractive" ? t("mode_extractive") :
+               r.mode && r.mode.startsWith("llm") ? t("mode_llm", esc(r.mode.slice(4))) : "";
   return `${esc(r.answer).replace(/\n/g, "<br>")}${sources ? `<div class="sources">${sources}</div>` : ""}
     ${r.warning ? `<div class="mode err">${esc(r.warning)}</div>` : ""}<div class="mode">${mode}</div>`;
 }
 
 async function ask(question) {
   addMsg(esc(question), "user");
-  const pending = addMsg("Recherche dans la mémoire du groupe…", "bot");
+  const pending = addMsg(esc(t("searching")), "bot");
   const btn = $("#ask-form button");
   btn.disabled = true;
   try {
-    const r = await api("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) });
+    const r = await api("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, lang }) });
     pending.innerHTML = renderAnswer(r);
     if (!r.found) pending.classList.add("notfound");
   } catch (e) {
@@ -96,7 +212,6 @@ $("#ask-form").addEventListener("submit", (e) => {
   $("#question").value = "";
   ask(q);
 });
-document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => ask(c.textContent)));
 
 // ---- ingestion
 $("#ingest-form").addEventListener("submit", async (e) => {
@@ -107,11 +222,11 @@ $("#ingest-form").addEventListener("submit", async (e) => {
   if ($("#author").value) fd.append("author", $("#author").value);
   if ($("#date").value) fd.append("date", $("#date").value);
   const btn = e.submitter; btn.disabled = true;
-  $("#ingest-result").innerHTML = "Indexation en cours…";
+  $("#ingest-result").textContent = t("indexing");
   try {
     const r = await api("/api/ingest", { method: "POST", body: fd });
     $("#ingest-result").innerHTML = r.ingested.map((d) =>
-      `<p class="ok">✔ ${esc(d.source)} — ${esc(TYPE_LABEL[d.doc_type])}, ${d.chunks} passage(s) (${d.chunk_words.join(", ")} mots)</p>`).join("");
+      `<p class="ok">${esc(t("ingested", d, typeLabel(d.doc_type)))}</p>`).join("");
     $("#ingest-form").reset();
     loadDocuments(); loadStatus();
   } catch (err) {
@@ -124,19 +239,21 @@ async function loadDocuments() {
   try { ({ documents } = await api("/api/documents")); } catch { return; }
   $("#docs tbody").innerHTML = documents.map((d) => `
     <tr><td>${esc(d.source)}${d.title ? `<br><small>${esc(d.title)}</small>` : ""}</td>
-      <td>${esc(TYPE_LABEL[d.doc_type] || d.doc_type)}</td>
+      <td>${esc(typeLabel(d.doc_type))}</td>
       <td>${esc(d.date_start)}${d.date_end && d.date_end !== d.date_start ? " → " + esc(d.date_end) : ""}</td>
       <td>${esc(d.authors.slice(0, 4).join(", "))}${d.authors.length > 4 ? "…" : ""}</td>
       <td>${d.chunks}</td>
-      <td><button data-del="${esc(d.source)}" title="Retirer de la mémoire">Supprimer</button></td></tr>`).join("")
-    || `<tr><td colspan="6">Aucun document. Ajoutez-en ci-dessus.</td></tr>`;
+      <td><button data-del="${esc(d.source)}" title="${esc(t("delete_title"))}">${esc(t("delete"))}</button></td></tr>`).join("")
+    || `<tr><td colspan="6">${esc(t("no_docs"))}</td></tr>`;
   document.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => {
-    if (!confirm(`Retirer ${b.dataset.del} de la mémoire ?`)) return;
+    if (!confirm(t("confirm_delete", b.dataset.del))) return;
     await api(`/api/documents/${encodeURIComponent(b.dataset.del)}`, { method: "DELETE" });
     loadDocuments(); loadStatus();
   }));
+  const selected = $("#summary-source").value;
   $("#summary-source").innerHTML = documents.map((d) =>
-    `<option value="${esc(d.source)}">${esc(d.source)} (${esc(TYPE_LABEL[d.doc_type] || d.doc_type)})</option>`).join("");
+    `<option value="${esc(d.source)}">${esc(d.source)} (${esc(typeLabel(d.doc_type))})</option>`).join("");
+  if (selected) $("#summary-source").value = selected;
 }
 
 // ---- résumé
@@ -144,20 +261,20 @@ $("#summary-btn").addEventListener("click", async () => {
   const source = $("#summary-source").value;
   if (!source) return;
   const btn = $("#summary-btn"); btn.disabled = true;
-  $("#summary-result").innerHTML = "Analyse en cours…";
+  $("#summary-result").textContent = t("analysing");
   try {
-    const r = await api("/api/summarize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source }) });
-    const tasks = (r.tasks || []).map((t) => `<li>${esc(t.task)}${t.owner ? ` <span class="badge">${esc(t.owner)}</span>` : ""}${t.deadline ? ` <span class="badge">${esc(t.deadline)}</span>` : ""}</li>`).join("");
+    const r = await api("/api/summarize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source, lang }) });
+    const tasks = (r.tasks || []).map((x) => `<li>${esc(x.task)}${x.owner ? ` <span class="badge">${esc(x.owner)}</span>` : ""}${x.deadline ? ` <span class="badge">${esc(x.deadline)}</span>` : ""}</li>`).join("");
     $("#summary-result").innerHTML = `<div class="summary">
-      ${r.participants?.length ? `<p class="hint">Participants : ${esc(r.participants.join(", "))}</p>` : ""}
-      <h3>Résumé</h3><p>${esc(r.summary)}</p>
-      <h3>Décisions (${(r.decisions || []).length})</h3><ul>${(r.decisions || []).map((d) => `<li>${esc(d)}</li>`).join("") || "<li>Aucune décision détectée.</li>"}</ul>
-      <h3>Tâches / actions (${(r.tasks || []).length})</h3><ul>${tasks || "<li>Aucune tâche détectée.</li>"}</ul>
-      <p class="mode">${r.mode === "extractive" ? "Mode extractif (heuristiques, sans LLM)." : esc(r.mode)}</p></div>`;
+      ${r.participants?.length ? `<p class="hint">${esc(t("participants"))} : ${esc(r.participants.join(", "))}</p>` : ""}
+      <h3>${esc(t("summary"))}</h3><p>${esc(r.summary)}</p>
+      <h3>${esc(t("decisions"))} (${(r.decisions || []).length})</h3><ul>${(r.decisions || []).map((d) => `<li>${esc(d)}</li>`).join("") || `<li>${esc(t("no_decisions"))}</li>`}</ul>
+      <h3>${esc(t("tasks"))} (${(r.tasks || []).length})</h3><ul>${tasks || `<li>${esc(t("no_tasks"))}</li>`}</ul>
+      <p class="mode">${r.mode === "extractive" ? esc(t("summary_extractive")) : esc(r.mode)}</p></div>`;
   } catch (e) {
     $("#summary-result").innerHTML = `<p class="err">${esc(e.message)}</p>`;
   } finally { btn.disabled = false; }
 });
 
+applyLang();
 loadStatus();
-loadDocuments();

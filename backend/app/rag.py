@@ -9,21 +9,18 @@ from typing import Any
 from .config import Settings
 from .llm import LLMClient, LLMError
 from .store import VectorStore
-from .textutils import idf_weights, keywords, lexical_overlap, split_sentences
+from .i18n import detect_lang, expand_query, msg, normalize_lang
+from .textutils import concept_idf, concept_overlap, query_concepts, split_sentences
 
 log = logging.getLogger(__name__)
 
-NOT_FOUND = (
-    "Je n'ai pas trouvé cette information dans la mémoire du groupe "
-    "(messages, transcriptions de réunions et documents indexés). "
-    "Elle n'est donc pas disponible pour le moment : vous pouvez poser la question dans le groupe "
-    "ou ajouter le document concerné."
-)
+NOT_FOUND = msg("not_found", "fr")  # compatibilité
 NOT_FOUND_MARKER = "INFORMATION_NON_DISPONIBLE"
+LANG_NAMES = {"fr": "français", "en": "anglais (English)"}
 
 SYSTEM_PROMPT = f"""Tu es UniPods Memory, l'assistant de mémoire collective d'une communauté UniPod.
-Tu réponds en français, de façon concise, UNIQUEMENT à partir des extraits numérotés fournis
-(messages de groupe, transcriptions de réunions, documents).
+Tu réponds en {{language}}, de façon concise, UNIQUEMENT à partir des extraits numérotés fournis
+(messages de groupe, transcriptions de réunions, documents), même s'ils sont dans une autre langue.
 Règles strictes :
 - Chaque affirmation doit être suivie de la référence de l'extrait utilisé, au format [1], [2]...
 - N'invente rien et n'utilise pas tes connaissances générales.
@@ -52,24 +49,27 @@ class RAGEngine:
 
     # ------------------------------------------------------------------ recherche
     def retrieve(self, question: str, top_k: int | None = None) -> list[dict[str, Any]]:
+        """Recherche hybride. La question est aussi interrogée « traduite » (lexique FR <-> EN)
+        pour retrouver des sources écrites dans l'autre langue."""
         top_k = top_k or self.settings.top_k
-        candidates = self.store.query(question, n=max(20, top_k * 5))
-        idf = idf_weights(keywords(question), [h["text"] for h in candidates])
+        queries = list(dict.fromkeys([question, expand_query(question)]))
+        candidates = self.store.query(queries, n=max(20, top_k * 5))
+        concepts = query_concepts(question)
+        idf = concept_idf(concepts, [h["text"] for h in candidates])
         for hit in candidates:
-            lex = lexical_overlap(question, hit["text"], idf)
+            lex = concept_overlap(concepts, hit["text"], idf)
             hit["lexical"] = lex
             hit["score"] = W_VECTOR * max(hit["similarity"], 0.0) + W_LEXICAL * lex
         candidates.sort(key=lambda h: h["score"], reverse=True)
         return candidates[:top_k]
 
     def _is_relevant(self, hit: dict[str, Any], question: str) -> bool:
-        # Il faut un score suffisant ET au moins un mot-clé significatif en commun
-        # (ou une similarité sémantique très forte) : c'est notre garde-fou anti-hallucination.
+        # Il faut un score suffisant ET une bonne couverture des mots-clés : c'est notre garde-fou
+        # anti-hallucination. Couverture pondérée par l'IDF : les mots rares/spécifiques de la question
+        # (ex. « salaire ») doivent être présents, sauf si la similarité sémantique est très forte.
         if hit["score"] < self.settings.min_relevance:
             return False
-        # Couverture lexicale pondérée par l'IDF : les mots rares/spécifiques de la question
-        # (ex. « salaire ») doivent être présents, sauf si la similarité sémantique est très forte.
-        if keywords(question) and hit["lexical"] < MIN_LEXICAL and hit["similarity"] < STRONG_SIMILARITY:
+        if query_concepts(question) and hit["lexical"] < MIN_LEXICAL and hit["similarity"] < STRONG_SIMILARITY:
             return False
         return True
 
@@ -84,12 +84,14 @@ class RAGEngine:
                 cands.append({"ref": ref, "text": s, "hit": hit})
         if not cands:
             return []
-        vecs = self.store.embed([question] + [c["text"] for c in cands])
-        qv = vecs[0]
-        idf = idf_weights(keywords(question), [c["text"] for c in cands])
-        for c, v in zip(cands, vecs[1:]):
-            c["similarity"] = _cosine(qv, v)
-            c["lexical"] = lexical_overlap(question, c["text"], idf)
+        queries = list(dict.fromkeys([question, expand_query(question)]))
+        vecs = self.store.embed(queries + [c["text"] for c in cands])
+        qvs, svs = vecs[: len(queries)], vecs[len(queries):]
+        concepts = query_concepts(question)
+        idf = concept_idf(concepts, [c["text"] for c in cands])
+        for c, v in zip(cands, svs):
+            c["similarity"] = max(_cosine(qv, v) for qv in qvs)
+            c["lexical"] = concept_overlap(concepts, c["text"], idf)
             c["score"] = W_VECTOR * c["similarity"] + W_LEXICAL * c["lexical"] + 0.05 * c["hit"]["score"]
             if c["text"].rstrip().endswith("?"):  # une question n'est pas une réponse
                 c["score"] *= 0.6
@@ -126,15 +128,18 @@ class RAGEngine:
             "score": round(hit["score"], 3),
         }
 
-    def answer(self, question: str, top_k: int | None = None) -> dict[str, Any]:
+    def answer(self, question: str, top_k: int | None = None, lang: str | None = None) -> dict[str, Any]:
+        """Répond dans ``lang`` (fr/en) ; par défaut, la langue détectée de la question."""
         question = question.strip()
+        lang = normalize_lang(lang) or detect_lang(question)
         if not question:
-            return {"question": question, "answer": "Merci de poser une question.", "found": False,
-                    "sources": [], "mode": "none"}
+            return {"question": question, "answer": msg("empty_question", lang), "found": False,
+                    "sources": [], "mode": "none", "lang": lang}
 
         hits = [h for h in self.retrieve(question, top_k) if self._is_relevant(h, question)]
         if not hits:
-            return {"question": question, "answer": NOT_FOUND, "found": False, "sources": [], "mode": "none"}
+            return {"question": question, "answer": msg("not_found", lang), "found": False, "sources": [],
+                    "mode": "none", "lang": lang}
 
         sentences = self.best_sentences(question, hits)
         excerpt_by_ref: dict[int, list[str]] = {}
@@ -144,18 +149,21 @@ class RAGEngine:
         warning = None
         if self.llm.enabled:
             try:
-                return self._answer_with_llm(question, hits, excerpt_by_ref)
+                return self._answer_with_llm(question, hits, excerpt_by_ref, lang)
             except LLMError as exc:
                 log.warning("LLM indisponible, bascule en mode extractif : %s", exc)
                 warning = str(exc)
 
-        result = self._answer_extractive(question, hits, sentences, excerpt_by_ref)
+        result = self._answer_extractive(question, hits, sentences, excerpt_by_ref, lang)
         if warning:
             result["warning"] = warning
         return result
 
-    def _answer_extractive(self, question, hits, sentences, excerpt_by_ref) -> dict[str, Any]:
-        lines = ["Voici ce que dit la mémoire du groupe :"]
+    def _answer_extractive(self, question, hits, sentences, excerpt_by_ref, lang) -> dict[str, Any]:
+        intro = msg("intro", lang)
+        if any(detect_lang(s["text"]) != lang for s in sentences):
+            intro += " " + msg("original_language", lang)
+        lines = [intro]
         used_refs: list[int] = []
         for s in sentences:
             meta = s["hit"]["metadata"]
@@ -172,9 +180,9 @@ class RAGEngine:
                 used_refs.append(s["ref"])
         sources = [self._citation(r, hits[r - 1], " … ".join(excerpt_by_ref.get(r, []))) for r in used_refs]
         return {"question": question, "answer": "\n".join(lines), "found": True, "sources": sources,
-                "mode": "extractive"}
+                "mode": "extractive", "lang": lang}
 
-    def _answer_with_llm(self, question, hits, excerpt_by_ref) -> dict[str, Any]:
+    def _answer_with_llm(self, question, hits, excerpt_by_ref, lang) -> dict[str, Any]:
         blocks = []
         for i, h in enumerate(hits, start=1):
             m = h["metadata"]
@@ -183,10 +191,10 @@ class RAGEngine:
                 f" | date={m.get('date') or 'inconnue'}\n{h['text']}"
             )
         user = "Extraits :\n\n" + "\n\n---\n\n".join(blocks) + f"\n\nQuestion : {question}"
-        text = self.llm.complete(SYSTEM_PROMPT, user)
+        text = self.llm.complete(SYSTEM_PROMPT.format(language=LANG_NAMES[lang]), user)
         if NOT_FOUND_MARKER in text or not text:
-            return {"question": question, "answer": NOT_FOUND, "found": False, "sources": [],
-                    "mode": f"llm:{self.llm.describe()}"}
+            return {"question": question, "answer": msg("not_found", lang), "found": False, "sources": [],
+                    "mode": f"llm:{self.llm.describe()}", "lang": lang}
         refs = sorted({int(r) for r in re.findall(r"\[(\d+)\]", text) if 1 <= int(r) <= len(hits)})
         if not refs:  # pas de citation : on rattache au meilleur extrait plutôt que de répondre sans source
             refs = [1]
@@ -196,4 +204,4 @@ class RAGEngine:
             excerpt = " … ".join(excerpt_by_ref.get(r, [])) or self.best_sentences(question, [h], 1)[0]["text"]
             sources.append(self._citation(r, h, excerpt))
         return {"question": question, "answer": text, "found": True, "sources": sources,
-                "mode": f"llm:{self.llm.describe()}"}
+                "mode": f"llm:{self.llm.describe()}", "lang": lang}

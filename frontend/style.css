@@ -58,3 +58,7 @@ td button { background: transparent; border: 1px solid var(--line); color: var(-
   .logo { height: 44px; }
   th:nth-child(3), td:nth-child(3), th:nth-child(4), td:nth-child(4) { display: none; }
 }
+.header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lang-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.lang-btn { border: 0; background: transparent; color: var(--muted); padding: 5px 11px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.lang-btn[aria-pressed="true"] { background: var(--accent); color: #fff; }

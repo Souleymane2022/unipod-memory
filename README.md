@@ -19,6 +19,7 @@ et les **documents**, puis répond directement aux questions **en citant la sour
 | ✅ | Garde-fou anti-hallucination : seuil de pertinence + réponse « information non disponible » | fait |
 | ✅ | Génération par LLM **optionnelle** (Anthropic, OpenAI ou compatible, Ollama local) ; sinon mode extractif | fait |
 | ✅ | Interface web (Q/R, ajout/suppression de documents, résumé) | fait |
+| ✅ | **Bilingue français / anglais** : interface FR/EN, réponses dans la langue choisie, questions en anglais sur des sources en français (et inversement) | fait |
 | ✅ | **Bonus** : résumé d'une conversation/réunion + décisions + tâches (responsable, échéance) | fait |
 | 🟡 | **Bonus** : bot Telegram (long polling) — logique testée, pas testé contre un vrai bot (pas de token) | fait, à valider |
 
@@ -36,9 +37,10 @@ et les **documents**, puis répond directement aux questions **en citant la sour
     llm.py           client LLM optionnel (httpx, sans SDK)
     insights.py      bonus : résumé, décisions, tâches
     textutils.py     mots-clés, racinisation FR, IDF, découpage en phrases
+    i18n.py          messages FR/EN, détection de langue, lexique bilingue pour la recherche inter-langues
     telegram_bot.py  bot Telegram optionnel
   scripts/ingest_folder.py   indexation d'un dossier en ligne de commande
-  tests/             21 tests pytest (parsing, chunking, API, PDF, anti-hallucination, LLM simulé, bot)
+  tests/             34 tests pytest (parsing, chunking, API, PDF, anti-hallucination, bilinguisme, LLM simulé, bot)
 /data
   samples/           jeu de démo : chat du groupe, transcription de réunion, guide du fablab
   chroma/            base vectorielle (générée, ignorée par git)
@@ -194,6 +196,32 @@ et **7 tâches** avec responsable et échéance (ex. *Moussa Kane — 3 devis d'
 
 ![Démo résumé](docs/demo_resume.png)
 
+## Bilingue français / anglais
+
+- **Interface** : bouton **FR / EN** dans l'en-tête. La langue du navigateur est choisie par défaut, puis le choix est mémorisé.
+- **Réponses** : dans la langue de l'interface (champ `lang` de `POST /api/ask` et `/api/summarize` : `fr` ou `en`).
+  Sans `lang`, l'API répond dans la langue détectée de la question (utile pour le bot Telegram).
+- **Questions inter-langues** : une question en anglais retrouve les messages et documents en français, et inversement.
+  Sans modèle multilingue (trop lourd pour Vercel), chaque mot de la question est associé à ses traductions via un lexique
+  intégré (`backend/app/i18n.py`, environ 350 mots courants : réunions, événements, lieux, matériel, budget…) ;
+  la recherche vectorielle est aussi lancée sur la question « enrichie » de ses traductions.
+- **Sans LLM**, les extraits sont cités **dans leur langue d'origine** et la réponse le signale ;
+  **avec un LLM**, la réponse est rédigée dans la langue demandée, avec les mêmes citations.
+
+Exemples testés (mode extractif) :
+
+> **Q :** What is the deadline to submit hackathon projects?
+> **R :** Here is what the group's memory says: (quotes are in their original language)
+> • « [2026-09-08 09:30] Awa Diallo: … La date limite de dépôt des projets pour le hackathon est le 10 octobre 2026 à 23h59. … » [1]
+
+> **Q :** What is the director's salary? → *I couldn't find this information in the group's memory…* (aucune source)
+
+Sur 26 questions de test (13 en anglais et 4 en français, avec réponse ; 9 hors sujet, dans les deux langues),
+les 26 obtiennent le bon résultat. Le lexique a été complété à partir de ces questions : un mot absent du lexique
+(vocabulaire très spécifique) peut empêcher une question en anglais de retrouver une source française.
+Pour l'améliorer, ajouter des entrées dans `EN_FR` (`backend/app/i18n.py`), ou utiliser un modèle d'embedding
+multilingue (`EMBEDDING_BACKEND=sentence-transformers`, hors Vercel).
+
 ## Réglages utiles (`.env`)
 
 | Variable | Défaut | Rôle |
@@ -206,10 +234,10 @@ et **7 tâches** avec responsable et échéance (ex. *Moussa Kane — 3 devis d'
 
 ## Bilan
 
-**Ce qui fonctionne** (vérifié par 21 tests automatisés, des appels HTTP réels et un test navigateur de l'interface) :
+**Ce qui fonctionne** (vérifié par 34 tests automatisés, des appels HTTP réels et un test navigateur de l'interface) :
 ingestion txt/md/pdf avec métadonnées, découpage 300–500 mots, ChromaDB persistant, Q/R avec citations exactes
 (auteur, date, heure, extrait), refus honnête quand l'information manque, interface web complète,
-résumé + décisions + tâches, fonctionnement 100 % gratuit et hors ligne (hors téléchargement initial du modèle).
+résumé + décisions + tâches, interface et réponses en français et en anglais, fonctionnement 100 % gratuit et hors ligne (hors téléchargement initial du modèle).
 
 **Bonus / non fini**
 - Chemin LLM (Anthropic / OpenAI / Ollama) : implémenté et testé avec un LLM simulé, **pas testé avec une vraie clé** dans cet environnement.

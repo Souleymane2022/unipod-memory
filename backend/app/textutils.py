@@ -5,6 +5,8 @@ import math
 import re
 import unicodedata
 
+from .i18n import translations
+
 STOPWORDS = set(
     """
     a à au aux avec ce ces cet cette dans de des du elle elles en et eux il ils je la le les leur leurs lui ma mais me
@@ -13,6 +15,9 @@ STOPWORDS = set(
     quel quelle quels quelles quoi comment quand combien pourquoi est-ce ceci cela ça tout tous toute toutes très plus
     moins aussi alors donc si non oui peut peuvent doit doivent il-y-a y-a-t-il qu'est-ce exactement bien
     the of and to in is are was were be for on at by with what when who how which where why do does did a an it this that
+    i me my we our you your they them their he she his her its there here about during from into over under than then
+    can could would should will shall may might have has had been being am any some all each every other such only
+    also just so as if or but not no yes get got make made many much tell please know there's what's
     """.split()
 )
 
@@ -53,27 +58,51 @@ def keywords(text: str) -> set[str]:
     return out
 
 
-def idf_weights(query_kws: set[str], texts: list[str]) -> dict[str, float]:
-    """IDF (formule BM25) des mots-clés de la question, calculée sur les textes candidats.
+Concept = frozenset[str]
+
+
+def query_concepts(query: str) -> list[Concept]:
+    """Mots-clés de la question, chacun avec ses équivalents dans l'autre langue (FR <-> EN).
+
+    Ex. « prizes » -> {priz, prix} : un texte français contenant « prix » couvre ce concept.
+    """
+    concepts: list[Concept] = []
+    for tok in _WORD_RE.findall(query.lower()):
+        tok = tok.split("'")[-1]
+        if len(tok) < 2 or tok in STOPWORDS or strip_accents(tok) in STOPWORDS:
+            continue
+        alts = {stem(tok)}
+        for tr in translations(tok):
+            alts.update(stem(w) for w in _WORD_RE.findall(tr.lower()) if w not in STOPWORDS)
+        concept = frozenset(alts)
+        if concept not in concepts:
+            concepts.append(concept)
+    return concepts
+
+
+def concept_idf(concepts: list[Concept], texts: list[str]) -> list[float]:
+    """IDF (formule BM25) de chaque concept, calculée sur les textes candidats.
 
     Un mot présent partout (ex. « UniPod ») pèse presque zéro ; un mot rare pèse beaucoup.
     """
     n = len(texts)
     text_kws = [keywords(t) for t in texts]
-    return {k: math.log(1 + (n - df + 0.5) / (df + 0.5))
-            for k in query_kws for df in [sum(1 for tk in text_kws if k in tk)]}
+    return [math.log(1 + (n - df + 0.5) / (df + 0.5))
+            for c in concepts for df in [sum(1 for tk in text_kws if c & tk)]]
 
 
-def lexical_overlap(query: str, text: str, idf: dict[str, float] | None = None) -> float:
-    """Part (pondérée par l'IDF si fournie) des mots-clés de la question présents dans le texte (0..1)."""
-    q = keywords(query)
-    if not q:
+def concept_overlap(concepts: list[Concept], text: str, weights: list[float] | None = None) -> float:
+    """Part (pondérée par l'IDF si fournie) des concepts de la question présents dans le texte (0..1)."""
+    if not concepts:
         return 0.0
+    weights = weights or [1.0] * len(concepts)
     t = keywords(text)
-    if not idf:
-        return len(q & t) / len(q)
-    total = sum(idf.get(k, 1.0) for k in q) or 1.0
-    return sum(idf.get(k, 1.0) for k in q & t) / total
+    total = sum(weights) or 1.0
+    return sum(w for c, w in zip(concepts, weights) if c & t) / total
+
+
+def lexical_overlap(query: str, text: str) -> float:
+    return concept_overlap(query_concepts(query), text)
 
 
 def split_sentences(text: str) -> list[str]:
