@@ -121,3 +121,20 @@ def test_llm_translation_is_batched_in_one_call(monkeypatch):
     assert out == ["EN:un", "EN:deux", "EN:trois", "four"]
     assert len(calls) == 1
     assert t.translate_many(["un"], ["fr"], "en") == ["EN:un"] and len(calls) == 1  # cache
+
+
+def test_retired_gemini_model_falls_back_to_default(monkeypatch):
+    calls = []
+
+    def post(url, headers=None, json=None, timeout=None):
+        calls.append(json["model"])
+        if json["model"] == "gemini-2.5-flash":
+            return httpx.Response(404, json=[{"error": {"code": 404, "message": "no longer available to new users"}}],
+                                  request=httpx.Request("POST", url))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", post)
+    llm = LLMClient(_settings(llm_provider="gemini", gemini_api_key="k", llm_model="gemini-2.5-flash"))
+    assert llm.complete("s", "u") == "OK"
+    assert calls == ["gemini-2.5-flash", "gemini-3.6-flash"] and llm.model == "gemini-3.6-flash"
+    assert llm.complete("s", "u") == "OK" and calls[-1] == "gemini-3.6-flash"  # la bascule est retenue

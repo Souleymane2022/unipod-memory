@@ -9,7 +9,7 @@ from typing import Any
 from .config import Settings
 from .llm import LLMClient, LLMError
 from .store import VectorStore
-from .i18n import detect_lang, expand_query, msg, normalize_lang
+from .i18n import detect_lang, expand_query, msg, normalize_lang, small_talk
 from .translate import Translator
 from .textutils import concept_idf, concept_overlap, query_concepts, split_sentences
 
@@ -137,6 +137,10 @@ class RAGEngine:
         if not question:
             return {"question": question, "answer": msg("empty_question", lang), "found": False,
                     "sources": [], "mode": "none", "lang": lang}
+
+        if kind := small_talk(question):  # « Bonjour ça va », « merci » : pas de recherche
+            return {"question": question, "answer": msg(kind, lang), "found": False, "sources": [],
+                    "mode": "chat", "lang": lang}
 
         hits = [h for h in self.retrieve(question, top_k) if self._is_relevant(h, question)]
         if not hits:

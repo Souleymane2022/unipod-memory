@@ -104,6 +104,19 @@ class LLMClient:
 
     def _complete_once(self, system: str, user: str, max_tokens: int) -> str:
         try:
+            return self._call(system, user, max_tokens)
+        except LLMError as exc:
+            # Modèle Gemini retiré (ex. LLM_MODEL=gemini-2.5-flash, refusé aux nouveaux comptes) :
+            # on bascule une fois sur le modèle par défaut plutôt que de rester en mode dégradé.
+            default = DEFAULT_MODELS["gemini"]
+            if self.provider == "gemini" and exc.status == 404 and self.model != default:
+                log.warning("Modèle Gemini %s indisponible, bascule sur %s : %s", self.model, default, exc)
+                self.model = default
+                return self._call(system, user, max_tokens)
+            raise
+
+    def _call(self, system: str, user: str, max_tokens: int) -> str:
+        try:
             if self.provider == "anthropic":
                 return self._anthropic(system, user, max_tokens)
             return self._openai_compatible(system, user, max_tokens)

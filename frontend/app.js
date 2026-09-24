@@ -210,7 +210,7 @@ async function ask(question) {
   try {
     const r = await api("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, lang }) });
     pending.innerHTML = renderAnswer(r);
-    if (!r.found) pending.classList.add("notfound");
+    if (!r.found && r.mode !== "chat") pending.classList.add("notfound");
   } catch (e) {
     pending.innerHTML = `<span class="err">${esc(e.message)}</span>`;
   } finally { btn.disabled = false; }

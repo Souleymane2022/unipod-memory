@@ -23,6 +23,9 @@ MESSAGES = {
             "ou ajouter le document concerné."
         ),
         "empty_question": "Merci de poser une question.",
+        "greeting": "Bonjour ! Je suis UniPods Memory. Posez-moi une question sur les messages du groupe, "
+                    "les réunions ou les documents, par exemple : « Quand a lieu la prochaine réunion ? »",
+        "thanks": "Avec plaisir ! N'hésitez pas si vous avez une autre question.",
         "intro": "Voici ce que dit la mémoire du groupe :",
         "original_language": "(citations dans leur langue d'origine)",
         "machine_translation": "(citations traduites automatiquement ; texte original dans les sources)",
@@ -37,6 +40,9 @@ MESSAGES = {
             "You can ask the question in the group or add the relevant document."
         ),
         "empty_question": "Please ask a question.",
+        "greeting": "Hello! I'm UniPods Memory. Ask me about the group's messages, meetings or documents, "
+                    "for example: \"When is the next meeting?\"",
+        "thanks": "You're welcome! Feel free to ask another question.",
         "intro": "Here is what the group's memory says:",
         "original_language": "(quotes are in their original language)",
         "machine_translation": "(quotes machine-translated; original text in the sources)",
@@ -74,6 +80,26 @@ def detect_lang(text: str) -> str:
     fr = sum(t in _FR_MARKERS for t in tokens) + sum(1 for c in text if c in "éèêàùçôîâ")
     en = sum(t in _EN_MARKERS for t in tokens)
     return "en" if en > fr else "fr"
+
+
+_GREETING_WORDS = set(
+    "bonjour bonsoir salut coucou hello hi hey yo cc slt bjr ça ca va vas comment allez tu vous "
+    "how are you good morning evening afternoon there bot le la les unipods memory cava caba sava".split()
+)
+_THANKS_WORDS = set("merci beaucoup thanks thank you thx super parfait génial ok okay top cool great".split())
+
+
+def small_talk(text: str) -> str | None:
+    """« greeting » ou « thanks » si le message n'est qu'une salutation / un remerciement, sinon None."""
+    tokens = [t.lower().split("'")[-1] for t in _TOKEN_RE.findall(text)]
+    if not tokens or len(tokens) > 8:
+        return None
+    if all(t in _THANKS_WORDS or t in _GREETING_WORDS for t in tokens) and any(t in _THANKS_WORDS for t in tokens) \
+            and not any(t in ("bonjour", "salut", "hello", "hi", "hey", "bonsoir") for t in tokens):
+        return "thanks"
+    if all(t in _GREETING_WORDS for t in tokens):
+        return "greeting"
+    return None
 
 
 # --------------------------------------------------------------------------- lexique EN -> FR

@@ -47,3 +47,25 @@ def test_lang_parameter_overrides_question_language(client):
     assert r["found"] and r["lang"] == "en" and r["answer"].startswith(msg("intro", "en"))
     r = _ask(client, "Who won the 2022 World Cup?", lang="fr")
     assert r["answer"] == msg("not_found", "fr")
+
+
+@pytest.mark.parametrize("text,kind", [
+    ("Bonjour caba", "greeting"), ("bonjour ça va ?", "greeting"), ("Hello!", "greeting"), ("Salut", "greeting"),
+    ("merci beaucoup", "thanks"), ("Thanks!", "thanks"),
+    ("Bonjour, quand a lieu la prochaine réunion ?", None), ("Quels sont les prix du hackathon ?", None),
+])
+def test_small_talk(text, kind):
+    from backend.app.i18n import small_talk
+    assert small_talk(text) == kind
+
+
+def test_greeting_answer(client):
+    r = _ask(client, "Bonjour caba", lang="en")
+    assert r["mode"] == "chat" and r["answer"] == msg("greeting", "en") and r["sources"] == []
+    r = _ask(client, "Bonjour, quand a lieu la prochaine réunion mensuelle ?")
+    assert r["found"] and "13 octobre" in r["answer"]
+
+
+def test_frontend_disables_browser_translation(client):
+    html = client.get("/").text
+    assert 'translate="no"' in html and 'content="notranslate"' in html
