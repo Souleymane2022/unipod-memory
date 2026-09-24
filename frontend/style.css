@@ -10,8 +10,8 @@
 body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
 header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 24px;
          background: var(--card); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 12px; }
-.logo { font-size: 32px; color: var(--accent); }
+.brand { display: flex; align-items: center; gap: 16px; }
+.logo { height: 56px; width: auto; background: #fff; border-radius: 8px; padding: 4px 6px; }
 h1 { margin: 0; font-size: 20px; }
 header p { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
 .status { font-size: 12px; color: var(--muted); background: var(--bg); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); }
@@ -54,5 +54,6 @@ td button { background: transparent; border: 1px solid var(--line); color: var(-
 @media (max-width: 640px) {
   header, .tabs, main { padding-left: 16px; padding-right: 16px; }
   .msg { max-width: 100%; }
+  .logo { height: 44px; }
   th:nth-child(3), td:nth-child(3), th:nth-child(4), td:nth-child(4) { display: none; }
 }
