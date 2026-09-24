@@ -37,7 +37,7 @@ def test_auto_detects_gemini_key(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "g-key")
     assert Settings().gemini_api_key == "g-key"
     llm = LLMClient(_settings(gemini_api_key="g-key"))
-    assert llm.provider == "gemini" and llm.model == "gemini-3.6-flash" and llm.enabled
+    assert llm.provider == "gemini" and llm.model == "gemini-flash-lite-latest" and llm.enabled
     # Anthropic reste prioritaire si les deux clés sont présentes
     assert LLMClient(_settings(gemini_api_key="g", anthropic_api_key="a")).provider == "anthropic"
 
@@ -136,5 +136,49 @@ def test_retired_gemini_model_falls_back_to_default(monkeypatch):
     monkeypatch.setattr(httpx, "post", post)
     llm = LLMClient(_settings(llm_provider="gemini", gemini_api_key="k", llm_model="gemini-2.5-flash"))
     assert llm.complete("s", "u") == "OK"
-    assert calls == ["gemini-2.5-flash", "gemini-3.6-flash"] and llm.model == "gemini-3.6-flash"
-    assert llm.complete("s", "u") == "OK" and calls[-1] == "gemini-3.6-flash"  # la bascule est retenue
+    assert calls == ["gemini-2.5-flash", "gemini-flash-lite-latest"] and llm.model == "gemini-flash-lite-latest"
+    assert llm.complete("s", "u") == "OK" and calls[-1] == "gemini-flash-lite-latest"  # le modèle retiré est écarté
+
+
+def _daily_quota_response(url):
+    body = [{"error": {"code": 429, "message": "Quota exceeded for metric: generate_content_free_tier_requests, limit: 20",
+                       "details": [{"violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}]
+    return httpx.Response(429, json=body, request=httpx.Request("POST", url))
+
+
+def test_daily_quota_switches_model_without_waiting(monkeypatch):
+    import backend.app.llm as llm_mod
+    sleeps, calls = [], []
+    monkeypatch.setattr(llm_mod.time, "sleep", lambda s: sleeps.append(s))
+
+    def post(url, headers=None, json=None, timeout=None):
+        calls.append(json["model"])
+        if json["model"] == "gemini-flash-lite-latest":
+            return _daily_quota_response(url)
+        return httpx.Response(200, json={"choices": [{"message": {"content": f"OK {json['model']}"}}]},
+                              request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", post)
+    llm = LLMClient(_settings(llm_provider="gemini", gemini_api_key="k"))
+    assert llm.complete("s", "u") == "OK gemini-3.5-flash-lite"
+    assert llm.complete("s", "u") == "OK gemini-3.5-flash-lite"
+    assert calls == ["gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite"]
+    assert sleeps == []  # aucune attente inutile
+
+
+def test_all_models_exhausted_fails_fast(monkeypatch):
+    calls = []
+
+    def post(url, headers=None, json=None, timeout=None):
+        calls.append(json["model"])
+        return _daily_quota_response(url)
+
+    monkeypatch.setattr(httpx, "post", post)
+    llm = LLMClient(_settings(llm_provider="gemini", gemini_api_key="k"))
+    with pytest.raises(LLMError):
+        llm.complete("s", "u")
+    n = len(calls)
+    assert n == 4  # chaque modèle essayé une fois
+    with pytest.raises(LLMError, match="quota du jour"):
+        llm.complete("s", "u")
+    assert len(calls) == n  # plus aucun appel tant que les modèles sont en pause

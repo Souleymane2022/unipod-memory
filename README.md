@@ -129,9 +129,14 @@ Avec un LLM, il rédige une réponse synthétique, toujours contrainte aux extra
 2. Ajouter **une seule variable** (dans `.env`, ou sur Vercel : *Settings → Environment Variables*, puis redéployer) :
    ```bash
    GEMINI_API_KEY=AQ....        # GOOGLE_API_KEY est aussi accepté
-   # facultatif : LLM_MODEL=gemini-3.6-flash (par défaut) ou un autre modèle listé dans AI Studio
+   # facultatif : LLM_MODEL=… pour imposer un modèle (par défaut : gemini-flash-lite-latest)
    ```
-3. Le statut en haut de la page affiche alors `LLM : gemini:gemini-3.6-flash`.
+3. Le statut en haut de la page affiche alors `LLM : gemini:gemini-flash-lite-latest`.
+
+**Quotas gratuits** : chaque modèle Gemini a son propre quota quotidien, parfois très bas (ex. 20 requêtes/jour pour
+`gemini-3.6-flash`). L'application utilise d'abord `gemini-flash-lite-latest`, puis bascule automatiquement sur
+`gemini-3.5-flash-lite`, `gemini-3.6-flash` et `gemini-flash-latest` quand le quota du jour d'un modèle est épuisé.
+Si tous sont épuisés, elle repasse en mode extractif sans attendre, jusqu'à la remise à zéro du quota.
 
 Ce que ça change : réponses rédigées en français **ou** en anglais, résumés rédigés, et la traduction des citations
 passe par Gemini (plus besoin de MyMemory). Si Gemini refuse (clé invalide, quota gratuit atteint), l'application

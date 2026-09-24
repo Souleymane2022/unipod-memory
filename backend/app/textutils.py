@@ -32,6 +32,13 @@ ANSWER_TYPE_WORDS = set(
     amount number date dates time hour hours place name names person reason way kind type sort list detail
     details information info thing things need find know tell exactly currently
     """.split()
+) | set(
+    # mots « méta » qui parlent du document plutôt que de son contenu
+    """
+    document documents doc docs fichier fichiers pdf texte dit disent parle parlent contient contiennent contenu
+    indexé indexée indexer indexe lindexer viens vient venez ajouté ajoutée ajouter envoyé envoyée uploadé mis
+    say says said talk talks contain contains content file files uploaded added indexed just
+    """.split()
 )
 
 _WORD_RE = re.compile(r"[\w']+", re.UNICODE)

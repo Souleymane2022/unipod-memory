@@ -19,13 +19,18 @@ from .config import Settings
 log = logging.getLogger(__name__)
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+# Chaîne de secours : chaque modèle a son propre quota gratuit quotidien (ex. 20 requêtes/jour pour
+# gemini-3.6-flash). Quand le quota du jour d'un modèle est épuisé, on passe au suivant.
+GEMINI_FALLBACK_MODELS = ("gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-flash-latest")
+EXHAUSTED_PAUSE_S = 3600  # un modèle au quota du jour épuisé est mis de côté 1 h
 # Les modèles Gemini récents « réfléchissent » avant de répondre et ces tokens comptent dans max_tokens :
 # on ajoute une marge pour ne pas obtenir une réponse vide ou tronquée.
 GEMINI_THINKING_MARGIN = 3000
 
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5",
-    "gemini": "gemini-3.6-flash",
+    # Alias qui suit la dernière version « lite » : quota gratuit plus large et jamais « retiré »
+    "gemini": "gemini-flash-lite-latest",
     "openai": "gpt-4o-mini",
     "ollama": "llama3.1",
 }
@@ -38,10 +43,16 @@ MAX_RETRY_AFTER_S = 10
 
 
 class LLMError(RuntimeError):
-    def __init__(self, message: str, status: int | None = None, retry_after: float | None = None):
+    def __init__(self, message: str, status: int | None = None, retry_after: float | None = None,
+                 daily_quota: bool = False):
         super().__init__(message)
         self.status = status
         self.retry_after = retry_after
+        self.daily_quota = daily_quota  # quota du jour épuisé : inutile de réessayer avec ce modèle
+
+
+def _is_daily_quota(r: httpx.Response) -> bool:
+    return r.status_code == 429 and ("PerDay" in r.text or "per day" in r.text.lower())
 
 
 def _retry_after(r: httpx.Response) -> float | None:
@@ -79,6 +90,10 @@ class LLMClient:
                 provider = "none"
         self.provider = provider
         self.model = settings.llm_model or DEFAULT_MODELS.get(provider, "")
+        self._models = [self.model]
+        if provider == "gemini":
+            self._models += [m for m in GEMINI_FALLBACK_MODELS if m != self.model]
+        self._unavailable_until: dict[str, float] = {}
 
     @property
     def enabled(self) -> bool:
@@ -95,7 +110,7 @@ class LLMClient:
             try:
                 return self._complete_once(system, user, max_tokens)
             except LLMError as exc:
-                if delay is None or exc.status not in RETRYABLE_STATUS:
+                if delay is None or exc.status not in RETRYABLE_STATUS or exc.daily_quota:
                     raise
                 wait = min(exc.retry_after or delay, MAX_RETRY_AFTER_S)
                 log.info("LLM %s indisponible (HTTP %s), nouvel essai dans %ss", self.provider, exc.status, wait)
@@ -103,17 +118,27 @@ class LLMClient:
         raise AssertionError("inaccessible")
 
     def _complete_once(self, system: str, user: str, max_tokens: int) -> str:
-        try:
-            return self._call(system, user, max_tokens)
-        except LLMError as exc:
-            # Modèle Gemini retiré (ex. LLM_MODEL=gemini-2.5-flash, refusé aux nouveaux comptes) :
-            # on bascule une fois sur le modèle par défaut plutôt que de rester en mode dégradé.
-            default = DEFAULT_MODELS["gemini"]
-            if self.provider == "gemini" and exc.status == 404 and self.model != default:
-                log.warning("Modèle Gemini %s indisponible, bascule sur %s : %s", self.model, default, exc)
-                self.model = default
+        """Essaie les modèles disponibles dans l'ordre. Un modèle retiré (404) ou dont le quota du jour est
+        épuisé est mis de côté et on passe au suivant (Gemini uniquement)."""
+        now = time.monotonic()
+        candidates = [m for m in self._models if self._unavailable_until.get(m, 0) <= now]
+        if not candidates:
+            raise LLMError(f"{self.provider} : quota du jour épuisé pour tous les modèles ({', '.join(self._models)})",
+                           429, daily_quota=True)
+        last: LLMError | None = None
+        for model in candidates:
+            self.model = model
+            try:
                 return self._call(system, user, max_tokens)
-            raise
+            except LLMError as exc:
+                if self.provider != "gemini" or not (exc.status == 404 or exc.daily_quota):
+                    raise
+                pause = 30 * 24 * 3600 if exc.status == 404 else EXHAUSTED_PAUSE_S
+                self._unavailable_until[model] = time.monotonic() + pause
+                log.warning("Modèle %s indisponible (%s), essai du suivant", model,
+                            "retiré" if exc.status == 404 else "quota du jour épuisé")
+                last = exc
+        raise last
 
     def _call(self, system: str, user: str, max_tokens: int) -> str:
         try:
@@ -170,7 +195,8 @@ class LLMClient:
             timeout=self.settings.llm_timeout,
         )
         if r.status_code >= 400:
-            raise LLMError(f"{self.provider} HTTP {r.status_code}: {_error_message(r)}", r.status_code, _retry_after(r))
+            raise LLMError(f"{self.provider} HTTP {r.status_code}: {_error_message(r)}", r.status_code,
+                           _retry_after(r), daily_quota=_is_daily_quota(r))
         choice = r.json()["choices"][0]
         content = (choice.get("message") or {}).get("content") or ""
         if not content.strip():

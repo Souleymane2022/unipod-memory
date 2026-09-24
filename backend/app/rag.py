@@ -10,8 +10,9 @@ from .config import Settings
 from .llm import LLMClient, LLMError
 from .store import BaseStore as VectorStore
 from .i18n import detect_lang, expand_query, msg, normalize_lang, small_talk
+from .insights import summarize
 from .translate import Translator
-from .textutils import concept_idf, concept_overlap, query_concepts, split_sentences
+from .textutils import concept_idf, concept_overlap, keywords, query_concepts, split_sentences, stem
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +33,21 @@ Règles strictes :
 # Pondération du score hybride
 W_VECTOR, W_LEXICAL = 0.55, 0.45
 MIN_LEXICAL = 0.45
-STRONG_SIMILARITY = 0.6
+STRONG_SIMILARITY = 0.7
+# Avec un LLM, le filtre est plus large : le LLM juge lui-même si les extraits répondent (sinon il renvoie
+# NOT_FOUND_MARKER). Sans LLM, c'est ce filtre seul qui évite de citer des passages hors sujet.
+LLM_MIN_SCORE = 0.15
+
+# « Que dit le document X ? », « Résume le PDF que je viens d'ajouter », « What is this document about? »
+DOC_INTENT_RE = re.compile(
+    r"(que dit|que disent|de quoi parle|parle de quoi|r[ée]sum|synth[èe]se|contenu d|que contient|"
+    r"summar|what does .{0,60}\b(say|contain)|what'?s .{0,60}\babout|what is .{0,60}\babout|overview of)",
+    re.IGNORECASE)
+RECENT_RE = re.compile(
+    r"(viens d|vient d|venez d|dernier|derni[èe]re|r[ée]cemment|just (uploaded|added|indexed)|latest|last|recent)",
+    re.IGNORECASE)
+GENERIC_NAME_WORDS = {"unipod", "unipods", "document", "doc", "fichier", "file", "pdf", "txt", "info", "pack",
+                      "programme", "program", "guide", "note", "notes", "2025", "2026", "2027"}
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -65,15 +80,54 @@ class RAGEngine:
         candidates.sort(key=lambda h: h["score"], reverse=True)
         return candidates[:top_k]
 
-    def _is_relevant(self, hit: dict[str, Any], question: str) -> bool:
-        # Il faut un score suffisant ET une bonne couverture des mots-clés : c'est notre garde-fou
-        # anti-hallucination. Couverture pondérée par l'IDF : les mots rares/spécifiques de la question
-        # (ex. « salaire ») doivent être présents, sauf si la similarité sémantique est très forte.
+    def _is_relevant(self, hit: dict[str, Any], question: str, for_llm: bool = False) -> bool:
+        if for_llm:
+            return hit["score"] >= LLM_MIN_SCORE
+        # Sans LLM : score suffisant ET bonne couverture des mots-clés, c'est notre garde-fou anti-hallucination.
+        # Couverture pondérée par l'IDF : les mots rares/spécifiques de la question (ex. « salaire », « loyer »)
+        # doivent être présents, sauf si la similarité sémantique est très forte.
         if hit["score"] < self.settings.min_relevance:
             return False
         if query_concepts(question) and hit["lexical"] < MIN_LEXICAL and hit["similarity"] < STRONG_SIMILARITY:
             return False
         return True
+
+    # ------------------------------------------------------------------ questions sur un document entier
+    def _target_document(self, question: str) -> dict[str, Any] | None:
+        """Document visé par « que dit le document X / résume le fichier que je viens d'ajouter »."""
+        if not DOC_INTENT_RE.search(question):
+            return None
+        docs = self.store.list_documents()
+        if not docs:
+            return None
+        q = keywords(question)
+        scored = []
+        for d in docs:
+            name = re.sub(r"\.[a-z0-9]+$", "", d["source"], flags=re.IGNORECASE)
+            words = {stem(w) for w in re.findall(r"[\w']+", f"{name} {d.get('title', '')}".lower())
+                     if len(w) > 2 and w not in GENERIC_NAME_WORDS}
+            scored.append((len(q & words), d.get("ingested_at", ""), d))
+        best = max(scored, key=lambda x: (x[0], x[1]))
+        if best[0] > 0 and sum(1 for s in scored if s[0] == best[0]) == 1:
+            return best[2]
+        if RECENT_RE.search(question):  # « que je viens d'indexer » -> le plus récent
+            return max(docs, key=lambda d: d.get("ingested_at", ""))
+        return None
+
+    def _answer_document(self, question: str, doc: dict[str, Any], lang: str) -> dict[str, Any]:
+        chunks = self.store.get_source_chunks(doc["source"])
+        result = summarize("\n".join(c["text"] for c in chunks), self.llm, lang, self.translator)
+        lines = [msg("doc_summary_intro", lang).format(source=doc["source"]), "", result["summary"]]
+        if result.get("decisions"):
+            lines += ["", msg("doc_key_points", lang)] + [f"• {d}" for d in result["decisions"][:6]]
+        first = chunks[0]
+        hit = {"text": first["text"], "metadata": first["metadata"], "score": 1.0}
+        excerpt = " ".join(split_sentences(first["text"])[:2])
+        out = {"question": question, "answer": "\n".join(lines), "found": True,
+               "sources": [self._citation(1, hit, excerpt)], "mode": "summary", "lang": lang}
+        if result.get("warning"):
+            out["warning"] = result["warning"]
+        return out
 
     # ------------------------------------------------------------------ extraits
     def best_sentences(self, question: str, hits: list[dict[str, Any]], limit: int = 3) -> list[dict[str, Any]]:
@@ -142,28 +196,44 @@ class RAGEngine:
             return {"question": question, "answer": msg(kind, lang), "found": False, "sources": [],
                     "mode": "chat", "lang": lang}
 
-        hits = [h for h in self.retrieve(question, top_k) if self._is_relevant(h, question)]
-        if not hits:
-            return {"question": question, "answer": msg("not_found", lang), "found": False, "sources": [],
-                    "mode": "none", "lang": lang}
+        if doc := self._target_document(question):
+            return self._answer_document(question, doc, lang)
 
-        sentences = self.best_sentences(question, hits)
-        excerpt_by_ref: dict[int, list[str]] = {}
-        for s in sentences:
-            excerpt_by_ref.setdefault(s["ref"], []).append(s["text"])
+        candidates = self.retrieve(question, top_k)
+        hits = [h for h in candidates if self._is_relevant(h, question)]
 
         warning = None
         if self.llm.enabled:
-            try:
-                return self._answer_with_llm(question, hits, excerpt_by_ref, lang)
-            except LLMError as exc:
-                log.warning("LLM indisponible, bascule en mode extractif : %s", exc)
-                warning = str(exc)
+            llm_hits = [h for h in candidates if self._is_relevant(h, question, for_llm=True)]
+            if llm_hits:
+                try:
+                    excerpts = self._excerpts(self.best_sentences(question, llm_hits))
+                    return self._answer_with_llm(question, llm_hits, excerpts, lang)
+                except LLMError as exc:
+                    log.warning("LLM indisponible, bascule en mode extractif : %s", exc)
+                    warning = str(exc)
+
+        if not hits:
+            out = {"question": question, "answer": msg("not_found", lang), "found": False, "sources": [],
+                   "mode": "none", "lang": lang}
+            if warning:
+                out["warning"] = warning
+            return out
+
+        sentences = self.best_sentences(question, hits)
+        excerpt_by_ref = self._excerpts(sentences)
 
         result = self._answer_extractive(question, hits, sentences, excerpt_by_ref, lang)
         if warning:
             result["warning"] = warning
         return result
+
+    @staticmethod
+    def _excerpts(sentences) -> dict[int, list[str]]:
+        excerpt_by_ref: dict[int, list[str]] = {}
+        for s in sentences:
+            excerpt_by_ref.setdefault(s["ref"], []).append(s["text"])
+        return excerpt_by_ref
 
     def _translate_sentences(self, sentences, lang) -> tuple[list[str], bool, bool]:
         """Traduit les citations écrites dans une autre langue que ``lang``.

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 LANGS = ("fr", "en")
 DEFAULT_LANG = "fr"
@@ -26,6 +27,8 @@ MESSAGES = {
         "greeting": "Bonjour ! Je suis UniPods Memory. Posez-moi une question sur les messages du groupe, "
                     "les réunions ou les documents, par exemple : « Quand a lieu la prochaine réunion ? »",
         "thanks": "Avec plaisir ! N'hésitez pas si vous avez une autre question.",
+        "doc_summary_intro": "Voici ce que contient le document « {source} » :",
+        "doc_key_points": "Points clés :",
         "intro": "Voici ce que dit la mémoire du groupe :",
         "original_language": "(citations dans leur langue d'origine)",
         "machine_translation": "(citations traduites automatiquement ; texte original dans les sources)",
@@ -43,6 +46,8 @@ MESSAGES = {
         "greeting": "Hello! I'm UniPods Memory. Ask me about the group's messages, meetings or documents, "
                     "for example: \"When is the next meeting?\"",
         "thanks": "You're welcome! Feel free to ask another question.",
+        "doc_summary_intro": "Here is what the document \"{source}\" contains:",
+        "doc_key_points": "Key points:",
         "intro": "Here is what the group's memory says:",
         "original_language": "(quotes are in their original language)",
         "machine_translation": "(quotes machine-translated; original text in the sources)",
@@ -113,7 +118,7 @@ EN_FR: dict[str, list[str]] = {
     "today": ["aujourd'hui"], "tomorrow": ["demain"], "yesterday": ["hier"], "next": ["prochaine", "prochain"],
     "last": ["dernier", "dernière"], "previous": ["précédent", "précédente"], "schedule": ["horaire", "planning", "calendrier"],
     "calendar": ["calendrier"], "open": ["ouvert", "ouvre", "ouverture"], "opening": ["ouverture", "ouvert"],
-    "close": ["fermé", "ferme", "fermeture"], "closed": ["fermé"], "saturday": ["samedi"], "sunday": ["dimanche"],
+    "close": ["fermé", "ferme", "fermeture", "ferment", "fermer", "clôture"], "closed": ["fermé"], "saturday": ["samedi"], "sunday": ["dimanche"],
     "monday": ["lundi"], "tuesday": ["mardi"], "wednesday": ["mercredi"], "thursday": ["jeudi"], "friday": ["vendredi"],
     "weekend": ["week-end", "samedi", "dimanche"], "holiday": ["férié", "vacances"], "start": ["début", "commence", "démarre", "démarrage"], "starts": ["commence", "démarre"], "begin": ["commence", "début"],
     "end": ["fin"], "until": ["jusqu'à"], "before": ["avant"], "after": ["après"], "late": ["tard", "retard"],
@@ -137,7 +142,7 @@ EN_FR: dict[str, list[str]] = {
     "win": ["gagner"], "team": ["équipe"], "teams": ["équipes"], "member": ["membre"], "members": ["membres"],
     "participant": ["participant"], "alone": ["seul"], "solo": ["seul"], "individual": ["individuel", "seul"],
     "register": ["inscrire", "inscription", "inscriptions"], "registration": ["inscription", "inscriptions"],
-    "sign": ["inscrire", "inscription"], "signup": ["inscription"], "enroll": ["inscrire"], "apply": ["candidature", "postuler"],
+    "sign": ["inscrire", "inscription"], "signup": ["inscription"], "enroll": ["inscrire"], "apply": ["candidature", "postuler", "candidater", "candidatent"],
     "application": ["candidature"], "submit": ["dépôt", "soumettre", "déposer"], "submission": ["dépôt", "soumission"],
     "project": ["projet"], "projects": ["projets"], "idea": ["idée"], "theme": ["thème"], "topic": ["thème", "sujet"],
     "track": ["axe"], "tracks": ["axes"], "mentor": ["mentor"], "mentors": ["mentors"], "jury": ["jury"],
@@ -170,7 +175,7 @@ EN_FR: dict[str, list[str]] = {
     # argent, budget
     "budget": ["budget"], "money": ["argent", "budget"], "spent": ["dépensé"], "spend": ["dépenser"],
     "funding": ["financement"], "reserved": ["réservés", "réserve"], "purchase": ["achat", "acheter"],
-    "buy": ["acheter", "achat"], "quote": ["devis"], "quotes": ["devis"], "salary": ["salaire"], "fcfa": ["fcfa"],
+    "buy": ["acheter", "achat"], "quote": ["devis"], "quotes": ["devis"], "fcfa": ["fcfa"],
     # communication
     "group": ["groupe"], "message": ["message"], "messages": ["messages"], "chat": ["chat", "groupe"],
     "pinned": ["épinglés"], "announcement": ["annonce"], "announced": ["annoncé", "annoncés"], "link": ["lien"],
@@ -201,6 +206,15 @@ EN_FR: dict[str, list[str]] = {
     "cv": ["cv"], "resume": ["cv"], "file": ["dossier", "fichier"], "presentation": ["présentation"],
     "compulsory": ["obligatoire"], "attendance": ["présence"], "afternoon": ["après-midi"], "morning": ["matin"],
     "evening": ["soir"], "per": ["par"], "commit": ["engage", "engagement"],
+    "receive": ["reçoivent", "reçoit", "recevoir", "reçu", "bénéficient", "obtiennent"],
+    "receives": ["reçoit", "bénéficie"], "get": ["obtenir", "recevoir"], "benefit": ["avantage", "bénéficier"],
+    "benefits": ["avantages"], "criteria": ["critères"], "criterion": ["critère"], "eligibility": ["éligibilité", "conditions"],
+    "eligible": ["éligible"], "requirements": ["conditions", "exigences"], "conditions": ["conditions"],
+    "age": ["âge"], "old": ["âge", "ans"], "years": ["ans", "années"], "cohort": ["cohorte"], "weeks": ["semaines"],
+    "interview": ["entretien"], "shortlisted": ["présélectionnés"], "concept": ["concept"], "note": ["note"],
+    "video": ["vidéo"], "demo": ["démo", "demo"], "credits": ["crédits"], "cloud": ["cloud"], "grants": ["bourses", "subventions"],
+    "seed": ["amorçage", "démarrage"], "impact": ["impact"], "diversity": ["diversité"], "feasibility": ["faisabilité"],
+    "rent": ["loyer"], "salary": ["salaire"], "skills": ["compétences"], "health": ["santé"], "education": ["éducation"],
     "president": ["président"], "country": ["pays"], "city": ["ville"], "world": ["monde"], "cup": ["coupe"],
     "recipe": ["recette"], "weather": ["météo"], "ticket": ["billet"], "flight": ["avion", "vol"],
 }
@@ -214,13 +228,22 @@ def _en_base_forms(token: str) -> list[str]:
     return forms
 
 
+def _fr_key(word: str) -> str:
+    """Clé française insensible aux accents, au pluriel et au féminin (sélectionnées = sélectionnés)."""
+    w = "".join(c for c in unicodedata.normalize("NFD", word.lower()) if unicodedata.category(c) != "Mn")
+    while len(w) > 4 and w[-1] in "sxe":  # sélectionnées / sélectionnés / sélectionné -> selectionn
+        w = w[:-1]
+    return w
+
+
 def _build_fr_en() -> dict[str, list[str]]:
     rev: dict[str, list[str]] = {}
     for en, frs in EN_FR.items():
         for fr in frs:
-            rev.setdefault(fr.lower(), [])
-            if en not in rev[fr.lower()]:
-                rev[fr.lower()].append(en)
+            for key in {fr.lower(), _fr_key(fr)}:
+                rev.setdefault(key, [])
+                if en not in rev[key]:
+                    rev[key].append(en)
     return rev
 
 
@@ -235,7 +258,7 @@ def translations(token: str) -> list[str]:
         if form in EN_FR:
             fr_words = EN_FR[form]
             return list(dict.fromkeys(fr_words + [en for fr in fr_words for en in FR_EN.get(fr.lower(), [])]))
-    en_words = FR_EN.get(t, [])
+    en_words = FR_EN.get(t) or FR_EN.get(_fr_key(t), [])
     return list(dict.fromkeys(en_words + [fr for en in en_words for fr in EN_FR.get(en, [])]))
 
 
