@@ -39,3 +39,28 @@ def test_very_long_paragraph_is_split():
     chunks = chunk_document(parse_document("bloc.txt", text), 300, 500)
     assert all(c.word_count <= 500 for c in chunks)
     assert sum(c.word_count for c in chunks) == 1300
+
+
+def test_empty_env_vars_fall_back_to_defaults(monkeypatch):
+    """Régression Vercel : des variables copiées vides depuis .env.example (TOP_K=, CHROMA_DIR=…)."""
+    from backend.app.config import ROOT_DIR, Settings
+
+    for name in ["TOP_K", "MIN_RELEVANCE", "CHUNK_MIN_WORDS", "CHUNK_MAX_WORDS", "LLM_TIMEOUT", "CHROMA_DIR",
+                 "UPLOAD_DIR", "COLLECTION_NAME", "EMBEDDING_BACKEND", "LLM_PROVIDER", "API_URL"]:
+        monkeypatch.setenv(name, "")
+    monkeypatch.setenv("CHUNK_MAX_WORDS", "pas un nombre")
+    s = Settings()
+    assert (s.top_k, s.min_relevance, s.chunk_min_words, s.chunk_max_words) == (4, 0.30, 300, 500)
+    assert s.chroma_dir != ROOT_DIR and s.collection_name == "unipods_memory"
+    assert s.embedding_backend == "default" and s.llm_provider == "auto"
+
+
+def test_vercel_storage_always_under_tmp(monkeypatch):
+    from backend.app import config
+
+    monkeypatch.setattr(config, "ON_VERCEL", True)
+    monkeypatch.setenv("CHROMA_DIR", "data/chroma")  # copié depuis .env.example
+    monkeypatch.setenv("UPLOAD_DIR", "")
+    s = config.Settings()
+    assert str(s.chroma_dir) == "/tmp/unipods/chroma" and str(s.upload_dir) == "/tmp/unipods/uploads"
+    assert s.model_cache_dir == "/tmp/unipods/models"
