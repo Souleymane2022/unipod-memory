@@ -11,7 +11,7 @@ import re
 from collections import Counter
 from typing import Any
 
-from .i18n import DEFAULT_LANG, normalize_lang
+from .i18n import DEFAULT_LANG, detect_lang, normalize_lang
 from .llm import LLMClient, LLMError
 from .textutils import keywords, split_sentences
 
@@ -114,8 +114,27 @@ def _extractive(text: str, max_sentences: int = 5) -> dict[str, Any]:
     return {"summary": summary, "decisions": decisions, "tasks": tasks, "participants": participants}
 
 
-def summarize(text: str, llm: LLMClient, lang: str | None = None) -> dict[str, Any]:
-    """Sans LLM, le résumé reprend des phrases de la source (donc dans sa langue d'origine)."""
+def _translate_result(result: dict[str, Any], lang: str, translator) -> dict[str, Any]:
+    """Traduit résumé, décisions et tâches extractifs si la source est dans une autre langue."""
+    src = detect_lang(result["summary"] or " ".join(result["decisions"]))
+    if translator is None or not translator.enabled or src == lang:
+        return result
+    items = [result["summary"]] + result["decisions"] + [t["task"] for t in result["tasks"]]
+    out = translator.translate_many(items, [src] * len(items), lang)
+    if not any(out):
+        result["translated"] = False
+        return result
+    result["summary"] = out[0] or result["summary"]
+    n = len(result["decisions"])
+    result["decisions"] = [tr or orig for tr, orig in zip(out[1:1 + n], result["decisions"])]
+    for task, tr in zip(result["tasks"], out[1 + n:]):
+        task["task"] = tr or task["task"]
+    result["translated"] = True
+    return result
+
+
+def summarize(text: str, llm: LLMClient, lang: str | None = None, translator=None) -> dict[str, Any]:
+    """Sans LLM, le résumé reprend des phrases de la source, traduites si besoin (``translator``)."""
     lang = normalize_lang(lang) or DEFAULT_LANG
     base = _extractive(text)
     if llm.enabled:
@@ -135,4 +154,4 @@ def summarize(text: str, llm: LLMClient, lang: str | None = None) -> dict[str, A
             log.warning("Résumé LLM impossible, bascule extractive : %s", exc)
             base["warning"] = str(exc)
     base["mode"] = "extractive"
-    return base
+    return _translate_result(base, lang, translator)

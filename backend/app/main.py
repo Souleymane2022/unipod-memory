@@ -17,16 +17,18 @@ from pydantic import BaseModel, Field
 
 from .chunker import chunk_document
 from .config import ROOT_DIR, get_settings
+from .i18n import DEFAULT_LANG, msg, normalize_lang
 from .insights import summarize
 from .llm import LLMClient
 from .parsers import DOC_TYPES, extract_text, parse_document
 from .rag import RAGEngine
 from .store import VectorStore
+from .translate import Translator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("unipods")
 
-ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf", ".log", ".csv"}
+ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".odt", ".html", ".htm", ".log", ".csv"}
 FRONTEND_DIR = ROOT_DIR / "frontend"
 SAMPLES_DIR = ROOT_DIR / "data" / "samples"
 
@@ -36,7 +38,8 @@ class Services:
         self.settings = get_settings()
         self.store = VectorStore(self.settings)
         self.llm = LLMClient(self.settings)
-        self.rag = RAGEngine(self.settings, self.store, self.llm)
+        self.translator = Translator(self.settings, self.llm)
+        self.rag = RAGEngine(self.settings, self.store, self.llm, self.translator)
         if self.settings.auto_seed and self.store.count() == 0:
             self.seed()
 
@@ -48,17 +51,19 @@ class Services:
         log.info("Jeu de démo indexé : %s chunks", self.store.count())
 
     def ingest(self, filename: str, data: bytes, doc_type: str | None = None, author: str | None = None,
-               date: str | None = None, save: bool = True) -> dict:
+               date: str | None = None, save: bool = True, lang: str | None = None) -> dict:
         """Pipeline d'ingestion commun à l'API, au CLI et au bot."""
+        lang = normalize_lang(lang) or DEFAULT_LANG
         source = Path(filename).name
         if Path(source).suffix.lower() not in ALLOWED_EXTENSIONS:
-            raise HTTPException(400, f"Extension non supportée pour {source} (acceptées : {sorted(ALLOWED_EXTENSIONS)})")
+            raise HTTPException(400, msg("unsupported_ext", lang).format(
+                source=source, formats=", ".join(sorted(ALLOWED_EXTENSIONS))))
         try:
             text = extract_text(source, data)
-        except Exception as exc:  # PDF corrompu, etc.
-            raise HTTPException(400, f"Lecture impossible de {source} : {exc}") from exc
+        except Exception as exc:  # PDF corrompu, docx invalide, etc.
+            raise HTTPException(400, msg("unreadable", lang).format(source=source, error=exc)) from exc
         if not text.strip():
-            raise HTTPException(400, f"{source} ne contient pas de texte exploitable (PDF scanné ?)")
+            raise HTTPException(400, msg("no_text", lang).format(source=source))
         if save:
             self.settings.upload_dir.mkdir(parents=True, exist_ok=True)
             (self.settings.upload_dir / source).write_bytes(data)
@@ -96,8 +101,8 @@ services.cache_clear = _reset_services  # compatibilité (tests, CLI)
 
 
 def ingest_bytes(filename: str, data: bytes, doc_type: str | None = None, author: str | None = None,
-                 date: str | None = None, save: bool = True) -> dict:
-    return services().ingest(filename, data, doc_type, author, date, save)
+                 date: str | None = None, save: bool = True, lang: str | None = None) -> dict:
+    return services().ingest(filename, data, doc_type, author, date, save, lang)
 
 
 # --------------------------------------------------------------------------- API
@@ -144,15 +149,17 @@ def health():
         return JSONResponse(status_code=503, content={
             "status": "error", "detail": f"{type(exc).__name__}: {exc}"[:1000]})
     return {"status": "ok", "chunks": s.store.count(), "llm": s.llm.describe(),
-            "embeddings": s.settings.embedding_backend, "ephemeral_storage": s.settings.ephemeral_storage}
+            "embeddings": s.settings.embedding_backend, "ephemeral_storage": s.settings.ephemeral_storage,
+            "translation": s.translator.provider}
 
 
 @app.post("/api/ingest")
 async def ingest(
-    files: list[UploadFile] = File(..., description="Fichiers .txt, .md ou .pdf"),
+    files: list[UploadFile] = File(..., description="Fichiers .txt, .md, .pdf, .docx, .odt ou .html"),
     doc_type: Optional[str] = Form(None, description="auto (vide), chat, transcript ou document"),
     author: Optional[str] = Form(None),
     date: Optional[str] = Form(None, description="AAAA-MM-JJ"),
+    lang: Optional[str] = Form(None, description="Langue des messages d'erreur : fr ou en"),
 ):
     if doc_type and doc_type not in DOC_TYPES and doc_type != "auto":
         raise HTTPException(400, f"doc_type doit être l'un de {DOC_TYPES}")
@@ -160,7 +167,7 @@ async def ingest(
     for f in files:
         data = await f.read()
         results.append(ingest_bytes(f.filename or "document.txt", data,
-                                    None if doc_type == "auto" else doc_type, author, date))
+                                    None if doc_type == "auto" else doc_type, author, date, lang=lang))
     return {"ingested": results, "total_chunks": services().store.count()}
 
 
@@ -200,7 +207,7 @@ def summarize_endpoint(req: SummarizeRequest):
         text, source = "\n".join(c["text"] for c in chunks), req.source
     else:
         raise HTTPException(400, "Fournir 'source' ou 'text'")
-    result = summarize(text, s.llm, req.lang)
+    result = summarize(text, s.llm, req.lang, s.translator)
     result["source"] = source
     return result
 

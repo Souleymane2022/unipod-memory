@@ -88,6 +88,11 @@ class Settings:
     anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY", ""))
     openai_api_key: str = field(default_factory=lambda: _env("OPENAI_API_KEY", ""))
 
+    # Traduction des citations (voir translate.py) : auto | llm | mymemory | none
+    translation_provider: str = field(default_factory=lambda: _env("TRANSLATION_PROVIDER", "auto").lower())
+    mymemory_email: str = field(default_factory=lambda: _env("MYMEMORY_EMAIL"))
+    mymemory_url: str = field(default_factory=lambda: _env("MYMEMORY_URL", "https://api.mymemory.translated.net/get"))
+
     # Bot Telegram (optionnel)
     telegram_bot_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN", ""))
     api_url: str = field(default_factory=lambda: _env("API_URL", "http://localhost:8000"))

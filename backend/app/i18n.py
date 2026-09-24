@@ -25,6 +25,10 @@ MESSAGES = {
         "empty_question": "Merci de poser une question.",
         "intro": "Voici ce que dit la mémoire du groupe :",
         "original_language": "(citations dans leur langue d'origine)",
+        "machine_translation": "(citations traduites automatiquement ; texte original dans les sources)",
+        "unsupported_ext": "Format non pris en charge pour {source}. Formats acceptés : {formats}.",
+        "unreadable": "Impossible de lire {source} (fichier corrompu ou protégé ?) : {error}",
+        "no_text": "{source} ne contient pas de texte exploitable (PDF scanné / image ?). Exportez-le en texte ou en PDF avec texte.",
     },
     "en": {
         "not_found": (
@@ -35,6 +39,10 @@ MESSAGES = {
         "empty_question": "Please ask a question.",
         "intro": "Here is what the group's memory says:",
         "original_language": "(quotes are in their original language)",
+        "machine_translation": "(quotes machine-translated; original text in the sources)",
+        "unsupported_ext": "Unsupported format for {source}. Accepted formats: {formats}.",
+        "unreadable": "Could not read {source} (corrupted or protected file?): {error}",
+        "no_text": "{source} has no extractable text (scanned PDF / image?). Export it as text or as a text-based PDF.",
     },
 }
 
@@ -81,7 +89,7 @@ EN_FR: dict[str, list[str]] = {
     "calendar": ["calendrier"], "open": ["ouvert", "ouvre", "ouverture"], "opening": ["ouverture", "ouvert"],
     "close": ["fermé", "ferme", "fermeture"], "closed": ["fermé"], "saturday": ["samedi"], "sunday": ["dimanche"],
     "monday": ["lundi"], "tuesday": ["mardi"], "wednesday": ["mercredi"], "thursday": ["jeudi"], "friday": ["vendredi"],
-    "weekend": ["week-end", "samedi", "dimanche"], "holiday": ["férié", "vacances"], "start": ["début", "commence"],
+    "weekend": ["week-end", "samedi", "dimanche"], "holiday": ["férié", "vacances"], "start": ["début", "commence", "démarre", "démarrage"], "starts": ["commence", "démarre"], "begin": ["commence", "début"],
     "end": ["fin"], "until": ["jusqu'à"], "before": ["avant"], "after": ["après"], "late": ["tard", "retard"],
     "early": ["tôt"], "duration": ["durée"], "long": ["durée", "long"], "minutes": ["minutes"],
     "october": ["octobre"], "september": ["septembre"], "november": ["novembre"], "december": ["décembre"],
@@ -109,7 +117,7 @@ EN_FR: dict[str, list[str]] = {
     "track": ["axe"], "tracks": ["axes"], "mentor": ["mentor"], "mentors": ["mentors"], "jury": ["jury"],
     "judge": ["jury"], "judges": ["jury"], "partner": ["partenaire"], "partners": ["partenaires"],
     "climate": ["climat"], "energy": ["énergie"], "solar": ["solaire"], "water": ["eau"], "agriculture": ["agriculture"],
-    "women": ["féminine", "femmes"], "female": ["féminine"], "incubation": ["incubation"], "startup": ["startup", "entreprise"],
+    "women": ["féminine", "femmes"], "female": ["féminine"], "incubation": ["incubation"], "startup": ["startup", "entreprise", "démarrage"],
     "training": ["formation"], "workshop": ["atelier", "formation"], "session": ["séance", "session"],
     "course": ["formation", "cours"], "online": ["ligne"], "information": ["information"], "info": ["information"],
     # lieux, matériel, fablab
@@ -132,7 +140,7 @@ EN_FR: dict[str, list[str]] = {
     "coffee": ["café"], "food": ["repas"], "meal": ["repas"], "meals": ["repas"], "lunch": ["midi", "repas"],
     "dinner": ["soir", "repas"], "allergies": ["allergies"], "paper": ["papier"], "pages": ["pages"],
     "door": ["porte"], "code": ["code"], "key": ["clé"], "contact": ["contact", "joignable"], "email": ["e-mail", "mail"],
-    "phone": ["téléphone"], "manager": ["responsable"], "director": ["directeur"], "coordinator": ["coordinateur"],
+    "phone": ["téléphone"], "manager": ["responsable"], "director": ["directeur"], "coordinator": ["coordinateur", "coordinatrice", "coordonne"], "coordinate": ["coordonne", "coordonner"],
     # argent, budget
     "budget": ["budget"], "money": ["argent", "budget"], "spent": ["dépensé"], "spend": ["dépenser"],
     "funding": ["financement"], "reserved": ["réservés", "réserve"], "purchase": ["achat", "acheter"],
@@ -155,6 +163,18 @@ EN_FR: dict[str, list[str]] = {
     "participation": ["participation"], "come": ["venir"], "go": ["aller"], "find": ["trouver"], "see": ["voir"],
     "ask": ["demander", "poser"], "send": ["envoyer"], "share": ["partager"], "added": ["ajoutée", "ajouté"],
     "add": ["ajouter"], "allergy": ["allergies"], "organize": ["organiser"], "organized": ["organisé"],
+    "grant": ["bourse", "subvention"], "scholarship": ["bourse"], "stipend": ["bourse"], "subsidy": ["subvention"],
+    "select": ["sélectionner", "sélection"], "selected": ["sélectionnés", "retenus", "sélectionné"],
+    "selection": ["sélection"], "chosen": ["retenus", "choisis"], "shortlist": ["présélection"],
+    "candidate": ["candidat"], "candidates": ["candidats"], "applicant": ["candidat"], "applicants": ["candidats"],
+    "applications": ["candidatures"], "results": ["résultats"], "result": ["résultat"], "pitch": ["pitch"],
+    "volunteer": ["bénévole", "volontaire"], "volunteers": ["bénévoles", "volontaires"], "volunteering": ["bénévolat"],
+    "certificate": ["certificat", "attestation"], "orientation": ["orientation", "accueil"], "coach": ["coach"],
+    "coaching": ["accompagnement", "coaching"], "mentoring": ["mentorat", "accompagnement"], "program": ["programme"],
+    "programme": ["programme"], "incubator": ["incubateur", "incubation"], "workspace": ["espace", "travail"],
+    "cv": ["cv"], "resume": ["cv"], "file": ["dossier", "fichier"], "presentation": ["présentation"],
+    "compulsory": ["obligatoire"], "attendance": ["présence"], "afternoon": ["après-midi"], "morning": ["matin"],
+    "evening": ["soir"], "per": ["par"], "commit": ["engage", "engagement"],
     "president": ["président"], "country": ["pays"], "city": ["ville"], "world": ["monde"], "cup": ["coupe"],
     "recipe": ["recette"], "weather": ["météo"], "ticket": ["billet"], "flight": ["avion", "vol"],
 }
@@ -182,12 +202,15 @@ FR_EN = _build_fr_en()
 
 
 def translations(token: str) -> list[str]:
-    """Équivalents dans l'autre langue d'un mot (EN -> FR ou FR -> EN)."""
+    """Équivalents d'un mot : traductions dans l'autre langue + synonymes obtenus par pivot
+    (FR -> EN -> FR : « commence » -> start -> « démarre », « début »)."""
     t = token.lower()
     for form in _en_base_forms(t):
         if form in EN_FR:
-            return EN_FR[form]
-    return FR_EN.get(t, [])
+            fr_words = EN_FR[form]
+            return list(dict.fromkeys(fr_words + [en for fr in fr_words for en in FR_EN.get(fr.lower(), [])]))
+    en_words = FR_EN.get(t, [])
+    return list(dict.fromkeys(en_words + [fr for en in en_words for fr in EN_FR.get(en, [])]))
 
 
 def expand_query(question: str) -> str:

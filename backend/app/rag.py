@@ -10,6 +10,7 @@ from .config import Settings
 from .llm import LLMClient, LLMError
 from .store import VectorStore
 from .i18n import detect_lang, expand_query, msg, normalize_lang
+from .translate import Translator
 from .textutils import concept_idf, concept_overlap, query_concepts, split_sentences
 
 log = logging.getLogger(__name__)
@@ -42,10 +43,11 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 class RAGEngine:
-    def __init__(self, settings: Settings, store: VectorStore, llm: LLMClient):
+    def __init__(self, settings: Settings, store: VectorStore, llm: LLMClient, translator: Translator | None = None):
         self.settings = settings
         self.store = store
         self.llm = llm
+        self.translator = translator or Translator(settings, llm)
 
     # ------------------------------------------------------------------ recherche
     def retrieve(self, question: str, top_k: int | None = None) -> list[dict[str, Any]]:
@@ -159,15 +161,41 @@ class RAGEngine:
             result["warning"] = warning
         return result
 
+    def _translate_sentences(self, sentences, lang) -> tuple[list[str], bool, bool]:
+        """Traduit les citations écrites dans une autre langue que ``lang``.
+        Le préfixe « [date heure] Auteur: » des messages est conservé tel quel."""
+        prefixes, bodies, srcs, todo = [], [], [], []
+        for i, s in enumerate(sentences):
+            m = re.match(r"^(\[[^\]]+\]\s*[^:]{1,60}:\s*)(.*)$", s["text"])
+            prefix, body = (m.group(1), m.group(2)) if m else ("", s["text"])
+            prefixes.append(prefix)
+            bodies.append(body)
+            src = detect_lang(body)
+            if src != lang:
+                todo.append(i)
+                srcs.append(src)
+        texts = [p + b for p, b in zip(prefixes, bodies)]
+        translated = self.translator.translate_many([bodies[i] for i in todo], srcs, lang)
+        ok = failed = False
+        for i, tr in zip(todo, translated):
+            if tr:
+                texts[i] = prefixes[i] + tr
+                ok = True
+            else:
+                failed = True
+        return texts, ok, failed
+
     def _answer_extractive(self, question, hits, sentences, excerpt_by_ref, lang) -> dict[str, Any]:
+        texts, translated, untranslated = self._translate_sentences(sentences, lang)
         intro = msg("intro", lang)
-        if any(detect_lang(s["text"]) != lang for s in sentences):
+        if translated:
+            intro += " " + msg("machine_translation", lang)
+        if untranslated:
             intro += " " + msg("original_language", lang)
         lines = [intro]
         used_refs: list[int] = []
-        for s in sentences:
+        for s, text in zip(sentences, texts):
             meta = s["hit"]["metadata"]
-            text = s["text"]
             ctx = []
             if not re.match(r"^\[[^\]]+\]", text):  # la ligne de chat contient déjà auteur + date
                 if meta.get("author"):

@@ -21,6 +21,19 @@ STOPWORDS = set(
     """.split()
 )
 
+# Mots qui décrivent le *type* de réponse attendue (« le montant de… », « the name of… ») et non le sujet :
+# ils ne sont pas exigés dans les sources, sinon « Quel est le montant de la bourse ? » serait refusé
+# alors que le document dit seulement « bourse de 500 000 FCFA ».
+ANSWER_TYPE_WORDS = set(
+    """
+    montant somme nombre date dates heure heures moment lieu endroit nom noms personne raison façon manière
+    type genre sorte liste détail détails information informations info infos chose choses savoir connaître
+    trouver dire possible besoin exactement actuellement
+    amount number date dates time hour hours place name names person reason way kind type sort list detail
+    details information info thing things need find know tell exactly currently
+    """.split()
+)
+
 _WORD_RE = re.compile(r"[\w']+", re.UNICODE)
 _SENT_RE = re.compile(r"(?<=[.!?…])\s+(?=[A-ZÀ-ÖØ-Ý0-9«\"(\[])")
 
@@ -32,6 +45,7 @@ def strip_accents(text: str) -> str:
 _SUFFIXES = (
     "issements", "issement", "ations", "ation", "ements", "ement", "ments", "ment", "euses", "euse",
     "ances", "ance", "ences", "ence", "ités", "ité", "ions", "ion", "ées", "ée", "és",
+    "trices", "trice", "teurs", "teur",  # coordinateur / coordinatrice -> coordina
     "ers", "er", "ez", "é", "es", "e", "s", "x",
 )
 
@@ -69,7 +83,7 @@ def query_concepts(query: str) -> list[Concept]:
     concepts: list[Concept] = []
     for tok in _WORD_RE.findall(query.lower()):
         tok = tok.split("'")[-1]
-        if len(tok) < 2 or tok in STOPWORDS or strip_accents(tok) in STOPWORDS:
+        if len(tok) < 2 or tok in STOPWORDS or strip_accents(tok) in STOPWORDS or tok in ANSWER_TYPE_WORDS:
             continue
         alts = {stem(tok)}
         for tr in translations(tok):

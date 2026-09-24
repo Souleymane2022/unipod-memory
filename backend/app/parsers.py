@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import io
 import re
+import zipfile
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
+from xml.etree import ElementTree
 
 from pypdf import PdfReader
 
@@ -50,11 +53,83 @@ class ParsedDocument:
     units: list[Unit] = field(default_factory=list)
 
 
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+_ODT_TEXT = "{urn:oasis:names:tc:opendocument:xmlns:text:1.0}"
+
+
+def _docx_text(data: bytes) -> str:
+    """Word .docx : un paragraphe <w:p> = une ligne (tabulations et retours à la ligne conservés)."""
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        root = ElementTree.fromstring(z.read("word/document.xml"))
+    lines = []
+    for p in root.iter(f"{_W}p"):
+        parts = []
+        for el in p.iter():
+            if el.tag == f"{_W}t" and el.text:
+                parts.append(el.text)
+            elif el.tag in (f"{_W}tab",):
+                parts.append("\t")
+            elif el.tag in (f"{_W}br", f"{_W}cr"):
+                parts.append("\n")
+        lines.append("".join(parts))
+    return "\n".join(lines)
+
+
+def _odt_text(data: bytes) -> str:
+    """OpenDocument .odt (LibreOffice) : paragraphes <text:p> et titres <text:h>."""
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        root = ElementTree.fromstring(z.read("content.xml"))
+    return "\n".join("".join(el.itertext()) for el in root.iter()
+                     if el.tag in (f"{_ODT_TEXT}p", f"{_ODT_TEXT}h"))
+
+
+class _HTMLText(HTMLParser):
+    BLOCKS = {"p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "article"}
+
+    def __init__(self):
+        super().__init__()
+        self.parts: list[str] = []
+        self._skip = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style"):
+            self._skip += 1
+        elif tag in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style") and self._skip:
+            self._skip -= 1
+        elif tag in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self._skip:
+            self.parts.append(data)
+
+
+def _html_text(text: str) -> str:
+    parser = _HTMLText()
+    parser.feed(text)
+    return re.sub(r"\n\s*\n+", "\n\n", "".join(parser.parts)).strip()
+
+
 def extract_text(filename: str, data: bytes) -> str:
-    if filename.lower().endswith(".pdf"):
+    name = filename.lower()
+    if name.endswith(".pdf"):
         reader = PdfReader(io.BytesIO(data))
         pages = [(page.extract_text() or "") for page in reader.pages]
         return "\n\n".join(pages)
+    if name.endswith(".docx"):
+        return _docx_text(data)
+    if name.endswith(".odt"):
+        return _odt_text(data)
+    if name.endswith((".html", ".htm")):
+        return _html_text(_decode(data))
+    return _decode(data)
+
+
+def _decode(data: bytes) -> str:
     for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
         try:
             return data.decode(enc)

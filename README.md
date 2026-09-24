@@ -11,7 +11,7 @@ et les **documents**, puis répond directement aux questions **en citant la sour
 
 | | Fonctionnalité | État |
 |---|---|---|
-| ✅ | Ingestion `.txt` / `.md` / `.pdf` (API multipart, API texte JSON, CLI, interface web) | fait |
+| ✅ | Ingestion `.txt` / `.md` / `.pdf` / `.docx` (Word) / `.odt` / `.html` (API multipart, API texte JSON, CLI, interface web) | fait |
 | ✅ | Détection auto du type : chat (format `[AAAA-MM-JJ HH:MM] Nom: …` ou export WhatsApp), transcription (`[HH:MM:SS] Nom: …`), document | fait |
 | ✅ | Chunks de 300–500 mots, équilibrés (à un message près, car on ne coupe jamais un message ou une intervention) ; métadonnées source, date(s), auteur(s), type, titre | fait |
 | ✅ | Embeddings locaux gratuits (ONNX all-MiniLM-L6-v2 via ChromaDB) + base vectorielle ChromaDB persistante | fait |
@@ -38,9 +38,11 @@ et les **documents**, puis répond directement aux questions **en citant la sour
     insights.py      bonus : résumé, décisions, tâches
     textutils.py     mots-clés, racinisation FR, IDF, découpage en phrases
     i18n.py          messages FR/EN, détection de langue, lexique bilingue pour la recherche inter-langues
+    translate.py     traduction des citations (LLM ou MyMemory gratuit), repli sur le texte original
     telegram_bot.py  bot Telegram optionnel
   scripts/ingest_folder.py   indexation d'un dossier en ligne de commande
-  tests/             34 tests pytest (parsing, chunking, API, PDF, anti-hallucination, bilinguisme, LLM simulé, bot)
+  tests/             43 tests pytest (parsing, chunking, API, PDF/docx/odt/html, anti-hallucination, bilinguisme,
+                     traduction simulée, LLM simulé, bot)
 /data
   samples/           jeu de démo : chat du groupe, transcription de réunion, guide du fablab
   chroma/            base vectorielle (générée, ignorée par git)
@@ -146,6 +148,10 @@ Trois façons (un fichier portant le même nom **remplace** l'ancienne version, 
 - Transcription : en-tête optionnel `Titre : …` / `Date : 2026-09-15` / `Participants : …`, puis `[00:04:05] Nom: texte`.
 - Document : en-tête optionnel `Titre :`, `Auteur :`, `Date :`, puis texte libre (paragraphes).
 - PDF : texte extrait avec pypdf (les PDF scannés sans couche texte sont refusés avec un message clair).
+- Word `.docx`, LibreOffice `.odt`, pages `.html` : texte extrait sans dépendance supplémentaire.
+- Sur Vercel, un fichier ne peut pas dépasser ~4 Mo (limite d'envoi de l'hébergement) : l'interface prévient avant l'envoi.
+- Pertinence : les mots qui décrivent le *type* de réponse (« montant », « nombre », « date », « nom »…) ne sont pas
+  exigés dans la source ; les mots du *sujet* (« bourse », « salaire »…) le sont — c'est le garde-fou anti-invention.
 
 Autres endpoints : `GET /api/documents`, `DELETE /api/documents/{source}`, `POST /api/summarize`
 (`{"source": "..."}` ou `{"text": "..."}`), `GET /api/health`.
@@ -205,8 +211,14 @@ et **7 tâches** avec responsable et échéance (ex. *Moussa Kane — 3 devis d'
   Sans modèle multilingue (trop lourd pour Vercel), chaque mot de la question est associé à ses traductions via un lexique
   intégré (`backend/app/i18n.py`, environ 350 mots courants : réunions, événements, lieux, matériel, budget…) ;
   la recherche vectorielle est aussi lancée sur la question « enrichie » de ses traductions.
-- **Sans LLM**, les extraits sont cités **dans leur langue d'origine** et la réponse le signale ;
-  **avec un LLM**, la réponse est rédigée dans la langue demandée, avec les mêmes citations.
+- **Traduction des citations** : quand la source n'est pas dans la langue de l'utilisateur, les phrases citées
+  sont traduites (le texte original reste visible dans la carte « source »). Par défaut (`TRANSLATION_PROVIDER=auto`) :
+  le LLM s'il est configuré, sinon l'API gratuite **MyMemory** (sans clé, ~5 000 caractères/jour, ~50 000 avec
+  `MYMEMORY_EMAIL`). ⚠️ Les phrases traduites sont alors envoyées à `api.mymemory.translated.net` :
+  mettre `TRANSLATION_PROVIDER=none` pour l'interdire. En cas d'échec (quota, réseau), la citation reste dans sa
+  langue d'origine et la réponse le signale. Les résumés extractifs sont traduits de la même façon.
+- **Changer de langue** traduit aussi la conversation en cours : les dernières questions sont reposées dans la nouvelle langue.
+- **Avec un LLM**, la réponse est directement rédigée dans la langue demandée, avec les mêmes citations.
 
 Exemples testés (mode extractif) :
 
@@ -234,7 +246,7 @@ multilingue (`EMBEDDING_BACKEND=sentence-transformers`, hors Vercel).
 
 ## Bilan
 
-**Ce qui fonctionne** (vérifié par 34 tests automatisés, des appels HTTP réels et un test navigateur de l'interface) :
+**Ce qui fonctionne** (vérifié par 43 tests automatisés, des appels HTTP réels et un test navigateur de l'interface) :
 ingestion txt/md/pdf avec métadonnées, découpage 300–500 mots, ChromaDB persistant, Q/R avec citations exactes
 (auteur, date, heure, extrait), refus honnête quand l'information manque, interface web complète,
 résumé + décisions + tâches, interface et réponses en français et en anglais, fonctionnement 100 % gratuit et hors ligne (hors téléchargement initial du modèle).

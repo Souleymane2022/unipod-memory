@@ -13,7 +13,8 @@ def client(tmp_path_factory):
     """API avec une base Chroma temporaire, sans LLM, alimentée avec data/samples."""
     tmp = tmp_path_factory.mktemp("unipods")
     os.environ.update({"CHROMA_DIR": str(tmp / "chroma"), "UPLOAD_DIR": str(tmp / "uploads"),
-                       "LLM_PROVIDER": "none", "COLLECTION_NAME": "test_memory"})
+                       "LLM_PROVIDER": "none", "COLLECTION_NAME": "test_memory",
+                       "TRANSLATION_PROVIDER": "none"})  # pas d'appel réseau ; traduction testée avec des doublures
     from fastapi.testclient import TestClient
 
     from backend.app import main

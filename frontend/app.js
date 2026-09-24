@@ -20,10 +20,11 @@ const I18N = {
     passage: "passage",
     type: { chat: "Messages", transcript: "Réunion", document: "Document" },
     ingest_title: "Ajouter des fichiers",
-    ingest_hint: "Formats : .txt, .md, .pdf. Exports de chat (<code>[2026-09-08 09:12] Nom: message</code> ou WhatsApp), transcriptions (<code>[00:04:05] Nom: texte</code>) et documents sont détectés automatiquement. Un fichier du même nom remplace l'ancienne version.",
+    ingest_hint: "Formats : .txt, .md, .pdf, .docx (Word), .odt, .html. Exports de chat (<code>[2026-09-08 09:12] Nom: message</code> ou WhatsApp), transcriptions (<code>[00:04:05] Nom: texte</code>) et documents sont détectés automatiquement. Un fichier du même nom remplace l'ancienne version.",
     f_type: "Type", f_author: "Auteur (optionnel)", f_date: "Date (optionnel)",
     t_auto: "Détection automatique", t_chat: "Messages (chat)", t_transcript: "Transcription de réunion", t_document: "Document",
     index_btn: "Indexer", indexing: "Indexation en cours…",
+    too_large: (n) => `${n} dépasse 4 Mo, la limite d'envoi de l'hébergement. Découpez-le ou exportez-le en .txt.`,
     ingested: (d, type) => `✔ ${d.source} — ${type}, ${d.chunks} passage(s) (${d.chunk_words.join(", ")} mots)`,
     docs_title: "Documents indexés",
     th: ["Source", "Type", "Dates", "Auteurs", "Passages", ""],
@@ -58,10 +59,11 @@ const I18N = {
     passage: "passage",
     type: { chat: "Messages", transcript: "Meeting", document: "Document" },
     ingest_title: "Add files",
-    ingest_hint: "Formats: .txt, .md, .pdf. Chat exports (<code>[2026-09-08 09:12] Name: message</code> or WhatsApp), transcripts (<code>[00:04:05] Name: text</code>) and documents are detected automatically. A file with the same name replaces the previous version.",
+    ingest_hint: "Formats: .txt, .md, .pdf, .docx (Word), .odt, .html. Chat exports (<code>[2026-09-08 09:12] Name: message</code> or WhatsApp), transcripts (<code>[00:04:05] Name: text</code>) and documents are detected automatically. A file with the same name replaces the previous version.",
     f_type: "Type", f_author: "Author (optional)", f_date: "Date (optional)",
     t_auto: "Automatic detection", t_chat: "Messages (chat)", t_transcript: "Meeting transcript", t_document: "Document",
     index_btn: "Index", indexing: "Indexing…",
+    too_large: (n) => `${n} is larger than 4 MB, the hosting upload limit. Split it or export it as .txt.`,
     ingested: (d, type) => `✔ ${d.source} — ${type}, ${d.chunks} passage(s) (${d.chunk_words.join(", ")} words)`,
     docs_title: "Indexed documents",
     th: ["Source", "Type", "Dates", "Authors", "Passages", ""],
@@ -105,10 +107,16 @@ function applyLang() {
   loadDocuments();
 }
 
-document.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", () => {
+document.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", async () => {
+  if (b.dataset.lang === lang) return;
   lang = b.dataset.lang;
   try { localStorage.setItem("lang", lang); } catch { /* ignoré */ }
   applyLang();
+  // Traduire la conversation : on repose les dernières questions dans la nouvelle langue.
+  const previous = history.slice(-5);
+  history.length = 0;
+  document.querySelectorAll("#chat .msg:not(:first-child)").forEach((m) => m.remove());
+  for (const q of previous) await ask(q);
 }));
 
 async function api(path, opts = {}) {
@@ -191,7 +199,10 @@ function renderAnswer(r) {
     ${r.warning ? `<div class="mode err">${esc(r.warning)}</div>` : ""}<div class="mode">${mode}</div>`;
 }
 
+const history = [];
+
 async function ask(question) {
+  history.push(question);
   addMsg(esc(question), "user");
   const pending = addMsg(esc(t("searching")), "bot");
   const btn = $("#ask-form button");
@@ -217,8 +228,11 @@ $("#ask-form").addEventListener("submit", (e) => {
 $("#ingest-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const fd = new FormData();
+  const big = [...$("#files").files].find((f) => f.size > 4 * 1024 * 1024);
+  if (big) { $("#ingest-result").innerHTML = `<p class="err">${esc(t("too_large", big.name))}</p>`; return; }
   for (const f of $("#files").files) fd.append("files", f);
   fd.append("doc_type", $("#doc_type").value);
+  fd.append("lang", lang);
   if ($("#author").value) fd.append("author", $("#author").value);
   if ($("#date").value) fd.append("date", $("#date").value);
   const btn = e.submitter; btn.disabled = true;
