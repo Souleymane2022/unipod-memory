@@ -139,7 +139,7 @@ document.querySelectorAll(".tab").forEach((btn) =>
 let lastHealth = null;
 function renderStatus(h) {
   const st = $("#status");
-  st.textContent = t("status_ok", h);
+  st.textContent = t("status_ok", h) + (h.version ? ` · v${h.version}` : "");
   st.title = h.ephemeral_storage ? t("status_ephemeral") : "";
   st.classList.remove("err");
 }

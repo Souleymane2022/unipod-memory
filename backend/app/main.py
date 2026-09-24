@@ -5,6 +5,7 @@ Lancement (depuis la racine du dépôt) :  uvicorn backend.app.main:app --reload
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import Optional
@@ -150,7 +151,9 @@ def health():
             "status": "error", "detail": f"{type(exc).__name__}: {exc}"[:1000]})
     return {"status": "ok", "chunks": s.store.count(), "llm": s.llm.describe(),
             "embeddings": s.settings.embedding_backend, "ephemeral_storage": s.settings.ephemeral_storage,
-            "translation": s.translator.provider}
+            "translation": s.translator.provider,
+            # Commit déployé (fourni par Vercel) : permet de vérifier quelle version tourne
+            "version": (os.getenv("VERCEL_GIT_COMMIT_SHA") or "")[:7] or "local"}
 
 
 @app.post("/api/ingest")
