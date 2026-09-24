@@ -10,6 +10,9 @@ const I18N = {
     wa_text: "Posez vos questions directement depuis WhatsApp : scannez le QR code ou appuyez sur le bouton, puis envoyez « aide ».",
     wa_button: "Ouvrir WhatsApp",
     wa_note: "Démo : numéro de test Meta, seuls les numéros autorisés reçoivent une réponse.",
+    tg_title: "Aussi sur Telegram",
+    tg_text: "Ouvert à tous : scannez le QR code ou appuyez sur le bouton, puis envoyez /aide ou posez directement votre question.",
+    tg_button: "Ouvrir Telegram",
     credit: "UniPods Memory · Hackathon UniPod",
     welcome: "Bonjour ! Posez-moi une question sur ce qui s'est dit dans le groupe, en réunion ou dans les documents. Je réponds uniquement à partir des sources indexées et je les cite. Vous pouvez écrire en français ou en anglais.",
     examples: [
@@ -55,6 +58,9 @@ const I18N = {
     wa_text: "Ask your questions straight from WhatsApp: scan the QR code or tap the button, then send \"help\".",
     wa_button: "Open WhatsApp",
     wa_note: "Demo: Meta test number, only authorised numbers receive a reply.",
+    tg_title: "Also on Telegram",
+    tg_text: "Open to everyone: scan the QR code or tap the button, then send /help or simply ask your question.",
+    tg_button: "Open Telegram",
     credit: "UniPods Memory · UniPod Hackathon",
     welcome: "Hello! Ask me anything about what was said in the group, in meetings or in documents. I only answer from the indexed sources and I cite them. You can write in English or French.",
     examples: [
@@ -159,8 +165,18 @@ function renderWhatsApp(h) {
   card.hidden = false;
 }
 
+function renderTelegram(h) {
+  const card = $("#tg-card");
+  if (!h.telegram_username) { card.hidden = true; return; }
+  $("#tg-link").href = `https://t.me/${h.telegram_username}`;
+  $("#tg-username").textContent = "@" + h.telegram_username;
+  $("#tg-qr").src = "/api/telegram/qr.svg";
+  card.hidden = false;
+}
+
 function renderStatus(h) {
   renderWhatsApp(h);
+  renderTelegram(h);
   const st = $("#status");
   st.textContent = t("status_ok", h) + (h.version ? ` · v${h.version}` : "");
   st.title = h.ephemeral_storage ? t("status_ephemeral") : "";

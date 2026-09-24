@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import re
 from collections import OrderedDict, deque
 from datetime import datetime, timezone
 from typing import Any
@@ -247,9 +248,53 @@ async def telegram_webhook(request: Request):
     chat_id = (msg.get("chat") or {}).get("id")
     if chat_id is None or _seen.check_and_add(f"tg:{update.get('update_id')}"):
         return {"status": "ok"}
-    body = _safe_reply(msg.get("text"), "telegram", svc)
-    _tg_api(s, "sendMessage", chat_id=chat_id, text=body, reply_to_message_id=msg.get("message_id"))
+    sender = str((msg.get("from") or {}).get("id", ""))
+    text = msg.get("text")
+    if text:
+        # Dans un groupe, les commandes arrivent sous la forme « /aide@NomDuBot »
+        text = re.sub(r"^(/\w+)@\w+", r"\1", text.strip())
+    _event("telegram", "message_reçu", sender, "texte" if text else "non textuel")
+    body = _safe_reply(text, "telegram", svc)
+    result = _tg_api(s, "sendMessage", chat_id=chat_id, text=body, reply_to_message_id=msg.get("message_id"))
+    _event("telegram", "réponse_envoyée" if result.get("ok") else "erreur_envoi", sender,
+           "" if result.get("ok") else str(result.get("description", ""))[:180])
     return {"status": "ok"}
+
+
+TELEGRAM_COMMANDS = {
+    "fr": [{"command": "aide", "description": "Comment utiliser UniPods Memory"},
+           {"command": "documents", "description": "Liste des sources indexées"},
+           {"command": "resume", "description": "Résumé d'un document : /resume <nom>"}],
+    "en": [{"command": "help", "description": "How to use UniPods Memory"},
+           {"command": "documents", "description": "List indexed sources"},
+           {"command": "resume", "description": "Summarize a document: /resume <name>"}],
+}
+TELEGRAM_DESCRIPTION = {
+    "fr": ("🧠 UniPods Memory, la mémoire collective de la communauté UniPod. Posez vos questions sur les messages, "
+           "réunions et documents du groupe : je réponds en citant mes sources, en français ou en anglais."),
+    "en": ("🧠 UniPods Memory, the UniPod community's collective memory. Ask about the group's messages, meetings "
+           "and documents: I answer with sources, in English or French."),
+}
+TELEGRAM_SHORT = {"fr": "La mémoire collective de la communauté UniPod 🧠",
+                  "en": "The UniPod community's collective memory 🧠"}
+
+
+@router.get("/api/telegram/qr.svg", include_in_schema=False)
+def telegram_qr():
+    """QR code qui ouvre la discussion Telegram avec le bot."""
+    import io
+
+    import segno
+
+    from .config import get_settings
+
+    username = get_settings().telegram_bot_username
+    if not username:
+        raise HTTPException(404, "TELEGRAM_BOT_USERNAME non défini")
+    buf = io.BytesIO()
+    segno.make(f"https://t.me/{username}", error="m").save(buf, kind="svg", scale=6, border=2,
+                                                          dark="#0b3d5c", light="#ffffff")
+    return Response(buf.getvalue(), media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=3600"})
 
 
 @router.get("/api/telegram/setup", include_in_schema=False)
@@ -263,4 +308,17 @@ def telegram_setup(request: Request, key: str = ""):
     url = str(request.base_url).rstrip("/").replace("http://", "https://") + "/api/telegram/webhook"
     result = _tg_api(s, "setWebhook", url=url, secret_token=s.telegram_webhook_secret,
                      allowed_updates=["message", "edited_message"], drop_pending_updates=True)
-    return {"webhook": url, "telegram": result}
+    # Menu des commandes et description du bot, en français (défaut) et en anglais
+    profile = {}
+    for lang, code in (("fr", None), ("en", "en")):
+        extra = {"language_code": code} if code else {}
+        profile[f"commands_{lang}"] = _tg_api(s, "setMyCommands", commands=TELEGRAM_COMMANDS[lang], **extra).get("ok")
+        profile[f"description_{lang}"] = _tg_api(s, "setMyDescription", description=TELEGRAM_DESCRIPTION[lang],
+                                                 **extra).get("ok")
+        profile[f"short_description_{lang}"] = _tg_api(s, "setMyShortDescription",
+                                                       short_description=TELEGRAM_SHORT[lang], **extra).get("ok")
+    me = _tg_api(s, "getMe").get("result")
+    me = me if isinstance(me, dict) else {}
+    return {"webhook": url, "telegram": result, "profile": profile, "bot": me.get("username"),
+            "hint": None if s.telegram_bot_username else
+            f"Ajoutez TELEGRAM_BOT_USERNAME={me.get('username', '<nom du bot>')} dans Vercel pour afficher le bot sur le site"}

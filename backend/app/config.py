@@ -120,6 +120,8 @@ class Settings:
     telegram_bot_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN", ""))
     # Mode webhook (Vercel) : secret partagé avec Telegram, et clé de /api/telegram/setup
     telegram_webhook_secret: str = field(default_factory=lambda: _env("TELEGRAM_WEBHOOK_SECRET"))
+    # Nom d'utilisateur du bot (ex. UniPodsMemoryBot) : lien t.me et QR code sur le site
+    telegram_bot_username: str = field(default_factory=lambda: _env("TELEGRAM_BOT_USERNAME").lstrip("@"))
 
     # WhatsApp Cloud API (Meta) — voir channels.py
     whatsapp_token: str = field(default_factory=lambda: _env("WHATSAPP_TOKEN"))

@@ -136,7 +136,16 @@ def test_telegram_setup(client, tg):
     assert client.get("/api/telegram/setup", params={"key": "faux"}).status_code == 403
     r = client.get("/api/telegram/setup", params={"key": "tg-secret"}).json()
     assert r["webhook"].startswith("https://") and r["webhook"].endswith("/api/telegram/webhook")
-    assert tg[-1]["url"].endswith("/setWebhook") and tg[-1]["json"]["secret_token"] == "tg-secret"
+    by_method = {}
+    for c in tg:
+        by_method.setdefault(c["url"].rsplit("/", 1)[-1], []).append(c["json"])
+    assert by_method["setWebhook"][0]["secret_token"] == "tg-secret"
+    commands = by_method["setMyCommands"]
+    assert [c["command"] for c in commands[0]["commands"]] == ["aide", "documents", "resume"]
+    assert commands[1]["language_code"] == "en" and commands[1]["commands"][0]["command"] == "help"
+    assert all(len(d["short_description"]) <= 120 for d in by_method["setMyShortDescription"])
+    assert all(len(d["description"]) <= 512 for d in by_method["setMyDescription"])
+    assert "getMe" in by_method
 
 
 def test_webhook_never_fails_on_network_or_engine_errors(client, wa, monkeypatch):
@@ -251,3 +260,28 @@ def test_whatsapp_setup_profile(client, monkeypatch):
     assert profile["url"].endswith("/1234567890/whatsapp_business_profile")
     assert profile["json"]["profile_picture_handle"] == "2::aW1hZ2UvanBlZw"
     assert len(profile["json"]["about"]) <= 139 and "UniPods Memory" in profile["json"]["description"]
+
+
+def test_telegram_group_command_and_events(client, tg):
+    channels.RECENT_EVENTS.clear()
+    if main.services().store.kind == "postgres":
+        with main.services().store._conn() as conn:
+            conn.execute(f"DELETE FROM {main.services().store.table}_events")
+    update = {"update_id": 77, "message": {"message_id": 9, "chat": {"id": -100123, "type": "group"},
+                                           "from": {"id": 424242}, "text": "/documents@UniPodsMemoryBot"}}
+    r = client.post("/api/telegram/webhook", json=update, headers={"X-Telegram-Bot-Api-Secret-Token": "tg-secret"})
+    assert r.status_code == 200
+    assert "guide_fablab_unipod.md" in tg[-1]["json"]["text"] and tg[-1]["json"]["chat_id"] == -100123
+    statuses = [e["status"] for e in client.get("/api/health").json()["recent_messages"] if e["channel"] == "telegram"]
+    assert statuses[:2] == ["réponse_envoyée", "message_reçu"]
+
+
+def test_telegram_qr_and_site_card(client, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "")
+    assert client.get("/api/telegram/qr.svg").status_code == 404
+    monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "@UniPodsMemoryBot")
+    r = client.get("/api/telegram/qr.svg")
+    assert r.status_code == 200 and "<svg" in r.text
+    monkeypatch.setattr(main.services().settings, "telegram_bot_username", "UniPodsMemoryBot")
+    assert client.get("/api/health").json()["telegram_username"] == "UniPodsMemoryBot"
+    assert 'id="tg-card"' in client.get("/").text

@@ -83,3 +83,6 @@ td:first-child { word-break: break-word; }
   .wa-card { margin: 12px 16px 0; flex-direction: column; align-items: flex-start; }
   .wa-qr { align-self: center; }
 }
+.tg-card { border-left-color: #229ed9; margin-top: 12px; }
+.tg-button { background: #1b7fb5; }
+.tg-button:hover { background: #166a97; }
