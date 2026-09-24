@@ -10,6 +10,14 @@ from dotenv import load_dotenv
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")
 
+# Sur Vercel (serverless), seul /tmp est inscriptible et il est effacé entre deux démarrages à froid.
+ON_VERCEL = bool(os.getenv("VERCEL"))
+_TMP = "/tmp/unipods"
+if ON_VERCEL:
+    # Certaines bibliothèques (onnxruntime…) écrivent dans ~/.cache, en lecture seule sur Vercel.
+    os.makedirs(_TMP, exist_ok=True)
+    os.environ["HOME"] = _TMP
+
 
 def _path(value: str) -> Path:
     p = Path(value)
@@ -27,8 +35,17 @@ def _float(name: str, default: float) -> float:
 @dataclass
 class Settings:
     # Stockage
-    chroma_dir: Path = field(default_factory=lambda: _path(os.getenv("CHROMA_DIR", "data/chroma")))
-    upload_dir: Path = field(default_factory=lambda: _path(os.getenv("UPLOAD_DIR", "data/uploads")))
+    chroma_dir: Path = field(default_factory=lambda: _path(
+        os.getenv("CHROMA_DIR", f"{_TMP}/chroma" if ON_VERCEL else "data/chroma")))
+    upload_dir: Path = field(default_factory=lambda: _path(
+        os.getenv("UPLOAD_DIR", f"{_TMP}/uploads" if ON_VERCEL else "data/uploads")))
+    # Dossier du modèle d'embedding ONNX (vide = ~/.cache/chroma, le défaut de ChromaDB)
+    model_cache_dir: str = field(default_factory=lambda: os.getenv(
+        "MODEL_CACHE_DIR", f"{_TMP}/models" if ON_VERCEL else ""))
+    # Indexe automatiquement data/samples au démarrage si la base est vide (activé par défaut sur Vercel)
+    auto_seed: bool = field(default_factory=lambda: os.getenv(
+        "AUTO_SEED", "1" if ON_VERCEL else "0").lower() in ("1", "true", "yes"))
+    ephemeral_storage: bool = ON_VERCEL
     collection_name: str = field(default_factory=lambda: os.getenv("COLLECTION_NAME", "unipods_memory"))
 
     # Embeddings : "default" (ONNX all-MiniLM-L6-v2 local, gratuit),

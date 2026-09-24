@@ -21,7 +21,10 @@ document.querySelectorAll(".tab").forEach((btn) =>
 async function loadStatus() {
   try {
     const h = await api("/api/health");
-    $("#status").textContent = `${h.chunks} passages indexés · LLM : ${h.llm}`;
+    $("#status").textContent = `${h.chunks} passages indexés · LLM : ${h.llm}` +
+      (h.ephemeral_storage ? " · stockage temporaire (démo)" : "");
+    $("#status").title = h.ephemeral_storage
+      ? "Hébergement serverless : les documents ajoutés peuvent disparaître au redémarrage. Le jeu de démo est réindexé automatiquement." : "";
   } catch { $("#status").textContent = "API injoignable"; }
 }
 

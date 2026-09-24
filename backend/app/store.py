@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
 
 import chromadb
+from chromadb.config import Settings as ChromaSettings
 from chromadb.utils import embedding_functions
 
 from .chunker import Chunk
@@ -28,6 +30,9 @@ def build_embedding_function(settings: Settings):
             model_name=settings.embedding_model or "text-embedding-3-small",
         )
     # Par défaut : all-MiniLM-L6-v2 en ONNX, exécuté localement, sans clé ni torch.
+    if settings.model_cache_dir:  # ex. /tmp sur Vercel, où ~/.cache n'est pas inscriptible
+        onnx = embedding_functions.ONNXMiniLM_L6_V2
+        onnx.DOWNLOAD_PATH = Path(settings.model_cache_dir) / onnx.MODEL_NAME
     return embedding_functions.DefaultEmbeddingFunction()
 
 
@@ -35,12 +40,23 @@ class VectorStore:
     def __init__(self, settings: Settings):
         settings.chroma_dir.mkdir(parents=True, exist_ok=True)
         self.embedding_function = build_embedding_function(settings)
-        self.client = chromadb.PersistentClient(path=str(settings.chroma_dir))
+        self.client = chromadb.PersistentClient(
+            path=str(settings.chroma_dir), settings=ChromaSettings(anonymized_telemetry=False)
+        )
         self.collection = self.client.get_or_create_collection(
             name=settings.collection_name,
             embedding_function=self.embedding_function,
             metadata={"hnsw:space": "cosine"},
         )
+        if settings.model_cache_dir:
+            self._free_model_archive()
+
+    def _free_model_archive(self) -> None:
+        """Charge le modèle puis supprime l'archive .tar.gz (~80 Mo) pour économiser /tmp."""
+        self.embedding_function(["initialisation"])
+        onnx = embedding_functions.ONNXMiniLM_L6_V2
+        archive = Path(onnx.DOWNLOAD_PATH) / onnx.ARCHIVE_FILENAME
+        archive.unlink(missing_ok=True)
 
     @staticmethod
     def doc_id_for(source: str) -> str:

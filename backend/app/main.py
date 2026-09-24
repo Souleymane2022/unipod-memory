@@ -28,6 +28,7 @@ log = logging.getLogger("unipods")
 
 ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf", ".log", ".csv"}
 FRONTEND_DIR = ROOT_DIR / "frontend"
+SAMPLES_DIR = ROOT_DIR / "data" / "samples"
 
 
 class Services:
@@ -36,6 +37,38 @@ class Services:
         self.store = VectorStore(self.settings)
         self.llm = LLMClient(self.settings)
         self.rag = RAGEngine(self.settings, self.store, self.llm)
+        if self.settings.auto_seed and self.store.count() == 0:
+            self.seed()
+
+    def seed(self) -> None:
+        """Indexe le jeu de démo (data/samples) : utile sur un hébergement sans disque persistant."""
+        for path in sorted(SAMPLES_DIR.glob("*")):
+            if path.suffix.lower() in ALLOWED_EXTENSIONS:
+                self.ingest(path.name, path.read_bytes(), save=False)
+        log.info("Jeu de démo indexé : %s chunks", self.store.count())
+
+    def ingest(self, filename: str, data: bytes, doc_type: str | None = None, author: str | None = None,
+               date: str | None = None, save: bool = True) -> dict:
+        """Pipeline d'ingestion commun à l'API, au CLI et au bot."""
+        source = Path(filename).name
+        if Path(source).suffix.lower() not in ALLOWED_EXTENSIONS:
+            raise HTTPException(400, f"Extension non supportée pour {source} (acceptées : {sorted(ALLOWED_EXTENSIONS)})")
+        try:
+            text = extract_text(source, data)
+        except Exception as exc:  # PDF corrompu, etc.
+            raise HTTPException(400, f"Lecture impossible de {source} : {exc}") from exc
+        if not text.strip():
+            raise HTTPException(400, f"{source} ne contient pas de texte exploitable (PDF scanné ?)")
+        if save:
+            self.settings.upload_dir.mkdir(parents=True, exist_ok=True)
+            (self.settings.upload_dir / source).write_bytes(data)
+        doc = parse_document(source, text, doc_type=doc_type or None, author=author or None, date=date or None)
+        chunks = chunk_document(doc, self.settings.chunk_min_words, self.settings.chunk_max_words)
+        result = self.store.add_document(doc, chunks)
+        result.update({"units": len(doc.units), "date": doc.date, "author": doc.author,
+                       "chunk_words": [c.word_count for c in chunks]})
+        log.info("Ingestion %s : %s chunks (%s)", source, len(chunks), doc.doc_type)
+        return result
 
 
 @lru_cache
@@ -45,27 +78,7 @@ def services() -> Services:
 
 def ingest_bytes(filename: str, data: bytes, doc_type: str | None = None, author: str | None = None,
                  date: str | None = None, save: bool = True) -> dict:
-    """Pipeline d'ingestion commun à l'API, au CLI et au bot."""
-    s = services()
-    source = Path(filename).name
-    if Path(source).suffix.lower() not in ALLOWED_EXTENSIONS:
-        raise HTTPException(400, f"Extension non supportée pour {source} (acceptées : {sorted(ALLOWED_EXTENSIONS)})")
-    try:
-        text = extract_text(source, data)
-    except Exception as exc:  # PDF corrompu, etc.
-        raise HTTPException(400, f"Lecture impossible de {source} : {exc}") from exc
-    if not text.strip():
-        raise HTTPException(400, f"{source} ne contient pas de texte exploitable (PDF scanné ?)")
-    if save:
-        s.settings.upload_dir.mkdir(parents=True, exist_ok=True)
-        (s.settings.upload_dir / source).write_bytes(data)
-    doc = parse_document(source, text, doc_type=doc_type or None, author=author or None, date=date or None)
-    chunks = chunk_document(doc, s.settings.chunk_min_words, s.settings.chunk_max_words)
-    result = s.store.add_document(doc, chunks)
-    result.update({"units": len(doc.units), "date": doc.date, "author": doc.author,
-                   "chunk_words": [c.word_count for c in chunks]})
-    log.info("Ingestion %s : %s chunks (%s)", source, len(chunks), doc.doc_type)
-    return result
+    return services().ingest(filename, data, doc_type, author, date, save)
 
 
 # --------------------------------------------------------------------------- API
@@ -99,7 +112,7 @@ class SummarizeRequest(BaseModel):
 def health():
     s = services()
     return {"status": "ok", "chunks": s.store.count(), "llm": s.llm.describe(),
-            "embeddings": s.settings.embedding_backend}
+            "embeddings": s.settings.embedding_backend, "ephemeral_storage": s.settings.ephemeral_storage}
 
 
 @app.post("/api/ingest")

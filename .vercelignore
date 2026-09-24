@@ -1,0 +1,6 @@
+.venv
+backend/tests
+docs
+data/chroma
+data/uploads
+.env
