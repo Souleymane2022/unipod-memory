@@ -48,6 +48,7 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
 td button { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; cursor: pointer; padding: 3px 8px; }
 .ok { color: var(--ok); } .err { color: var(--warn); }
+.status.err { border-color: var(--warn); max-width: 60ch; }
 .summary h3 { font-size: 15px; margin: 16px 0 6px; }
 .summary li { margin-bottom: 6px; }
 .badge { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); margin-left: 4px; }

@@ -8,6 +8,32 @@ def test_health(client):
     assert r["status"] == "ok" and r["chunks"] >= 3
 
 
+def test_ping_and_health_error_reporting(client, monkeypatch):
+    from backend.app import main
+
+    assert client.get("/api/ping").json() == {"status": "ok"}
+
+    def broken():
+        raise RuntimeError("disque en lecture seule")
+
+    monkeypatch.setattr(main, "services", broken)
+    r = client.get("/api/health")
+    assert r.status_code == 503 and "disque en lecture seule" in r.json()["detail"]
+
+
+def test_concurrent_first_requests_share_one_instance(client):
+    """Régression : deux requêtes simultanées au démarrage créaient deux clients Chroma (KeyError)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from backend.app import main
+
+    main.services.cache_clear()
+    with ThreadPoolExecutor(8) as pool:
+        instances = list(pool.map(lambda _: main.services(), range(8)))
+    assert all(i is instances[0] for i in instances)
+    assert client.get("/api/health").status_code == 200
+
+
 def test_documents_listed_with_metadata(client):
     docs = {d["source"]: d for d in client.get("/api/documents").json()["documents"]}
     assert docs["chat_general_septembre.txt"]["doc_type"] == "chat"

@@ -5,13 +5,13 @@ Lancement (depuis la racine du dépôt) :  uvicorn backend.app.main:app --reload
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
+import threading
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -71,9 +71,28 @@ class Services:
         return result
 
 
-@lru_cache
+_services: Services | None = None
+_services_lock = threading.Lock()
+
+
 def services() -> Services:
-    return Services()
+    """Instance unique, créée une seule fois même si plusieurs requêtes arrivent en même temps
+    (au chargement, la page appelle /api/health et /api/documents en parallèle)."""
+    global _services
+    if _services is None:
+        with _services_lock:
+            if _services is None:
+                _services = Services()
+    return _services
+
+
+def _reset_services() -> None:
+    global _services
+    with _services_lock:
+        _services = None
+
+
+services.cache_clear = _reset_services  # compatibilité (tests, CLI)
 
 
 def ingest_bytes(filename: str, data: bytes, doc_type: str | None = None, author: str | None = None,
@@ -108,9 +127,20 @@ class SummarizeRequest(BaseModel):
     text: Optional[str] = Field(None, description="Ou texte brut à résumer")
 
 
+@app.get("/api/ping")
+def ping():
+    """Répond sans initialiser la base ni le modèle : permet de vérifier que la fonction tourne."""
+    return {"status": "ok"}
+
+
 @app.get("/api/health")
 def health():
-    s = services()
+    try:
+        s = services()
+    except Exception as exc:  # erreur d'initialisation (dépendance, disque, téléchargement du modèle…)
+        log.exception("Échec d'initialisation")
+        return JSONResponse(status_code=503, content={
+            "status": "error", "detail": f"{type(exc).__name__}: {exc}"[:1000]})
     return {"status": "ok", "chunks": s.store.count(), "llm": s.llm.describe(),
             "embeddings": s.settings.embedding_backend, "ephemeral_storage": s.settings.ephemeral_storage}
 

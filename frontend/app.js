@@ -18,14 +18,35 @@ document.querySelectorAll(".tab").forEach((btn) =>
   })
 );
 
-async function loadStatus() {
+async function loadStatus(attempt = 0) {
+  const st = $("#status");
   try {
-    const h = await api("/api/health");
-    $("#status").textContent = `${h.chunks} passages indexés · LLM : ${h.llm}` +
-      (h.ephemeral_storage ? " · stockage temporaire (démo)" : "");
-    $("#status").title = h.ephemeral_storage
-      ? "Hébergement serverless : les documents ajoutés peuvent disparaître au redémarrage. Le jeu de démo est réindexé automatiquement." : "";
-  } catch { $("#status").textContent = "API injoignable"; }
+    const res = await fetch("/api/health");
+    const h = await res.json().catch(() => null);
+    if (res.ok && h) {
+      st.textContent = `${h.chunks} passages indexés · LLM : ${h.llm}` + (h.ephemeral_storage ? " · stockage temporaire (démo)" : "");
+      st.title = h.ephemeral_storage
+        ? "Hébergement serverless : les documents ajoutés peuvent disparaître au redémarrage. Le jeu de démo est réindexé automatiquement." : "";
+      st.classList.remove("err");
+      if (attempt > 0) loadDocuments();
+      return;
+    }
+    if (h && h.detail) {  // erreur d'initialisation renvoyée par le serveur
+      st.textContent = "Erreur serveur : " + h.detail;
+      st.classList.add("err");
+      return;
+    }
+    throw new Error(`HTTP ${res.status}`);
+  } catch (e) {
+    // Démarrage à froid (serverless) : installation, téléchargement du modèle… on réessaie.
+    if (attempt < 12) {
+      st.textContent = `Démarrage du serveur… (${attempt + 1}/12)`;
+      setTimeout(() => loadStatus(attempt + 1), 5000);
+    } else {
+      st.textContent = `API injoignable (${e.message}). Ouvrez /api/health pour le détail.`;
+      st.classList.add("err");
+    }
+  }
 }
 
 // ---- Q/R
@@ -99,7 +120,8 @@ $("#ingest-form").addEventListener("submit", async (e) => {
 });
 
 async function loadDocuments() {
-  const { documents } = await api("/api/documents");
+  let documents;
+  try { ({ documents } = await api("/api/documents")); } catch { return; }
   $("#docs tbody").innerHTML = documents.map((d) => `
     <tr><td>${esc(d.source)}${d.title ? `<br><small>${esc(d.title)}</small>` : ""}</td>
       <td>${esc(TYPE_LABEL[d.doc_type] || d.doc_type)}</td>

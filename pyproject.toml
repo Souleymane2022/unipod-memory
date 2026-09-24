@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 # Garder synchronisé avec requirements.txt (Vercel lit ce fichier, pip lit requirements.txt)
 dependencies = [
     "fastapi>=0.110",
-    "uvicorn[standard]>=0.29",
+    "uvicorn>=0.29",
     "python-multipart>=0.0.9",
     "chromadb>=0.5.0",
     "pypdf>=4.0",
@@ -17,6 +17,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+
+# Dépendances transitives de ChromaDB jamais importées ici : on les exclut pour alléger
+# le paquet serverless (Vercel) et éviter l'installation de dépendances au démarrage à froid.
+[tool.uv]
+override-dependencies = [
+    "kubernetes ; sys_platform == 'never'",
+    "hf-xet ; sys_platform == 'never'",
+]
 
 [tool.vercel]
 entrypoint = "backend.app.main:app"
