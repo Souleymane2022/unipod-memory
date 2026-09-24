@@ -159,6 +159,11 @@ def health():
             "translation": s.translator.provider,
             "channels": {"whatsapp": bool(s.settings.whatsapp_token and s.settings.whatsapp_phone_number_id),
                          "telegram": bool(s.settings.telegram_bot_token)},
+            # Diagnostic sans révéler de secret : variables reçues (oui/non) et longueur de la phrase de vérification
+            "whatsapp_config": {"WHATSAPP_TOKEN": bool(s.settings.whatsapp_token),
+                                "WHATSAPP_PHONE_NUMBER_ID": bool(s.settings.whatsapp_phone_number_id),
+                                "WHATSAPP_APP_SECRET": bool(s.settings.whatsapp_app_secret),
+                                "WHATSAPP_VERIFY_TOKEN_length": len(s.settings.whatsapp_verify_token)},
             # Commit déployé (fourni par Vercel) : permet de vérifier quelle version tourne
             "version": (os.getenv("VERCEL_GIT_COMMIT_SHA") or "")[:7] or "local"}
 

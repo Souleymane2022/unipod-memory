@@ -81,3 +81,12 @@ def test_database_url_detected_with_vercel_prefix(monkeypatch):
     assert Settings().database_url == "postgres://preferred"
     monkeypatch.setenv("DATABASE_URL", "postgres://plain")
     assert Settings().database_url == "postgres://plain"
+
+
+def test_env_quotes_are_stripped(monkeypatch):
+    from backend.app.config import Settings
+
+    monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", '  "unipod-secret-2026" ')
+    assert Settings().whatsapp_verify_token == "unipod-secret-2026"
+    monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "'abc'")
+    assert Settings().whatsapp_verify_token == "abc"

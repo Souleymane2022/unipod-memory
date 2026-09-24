@@ -13,8 +13,11 @@ load_dotenv(ROOT_DIR / ".env")
 
 def _env(name: str, default: str = "") -> str:
     """Variable d'environnement ; une valeur vide (ex. `TOP_K=` copié depuis .env.example) = non définie."""
-    value = os.getenv(name)
-    return value.strip() if value and value.strip() else default
+    value = (os.getenv(name) or "").strip()
+    # Guillemets collés par erreur dans l'interface Vercel : "abc" ou 'abc' -> abc
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1].strip()
+    return value or default
 
 
 # Sur Vercel (serverless), seul /tmp est inscriptible et il est effacé entre deux démarrages à froid.

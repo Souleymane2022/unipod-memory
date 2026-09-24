@@ -165,3 +165,10 @@ def test_legal_pages_for_meta(client, monkeypatch):
     monkeypatch.setattr(main.services().settings, "contact_email", "contact@example.org")
     monkeypatch.setattr("backend.app.main.get_settings", lambda: main.services().settings)
     assert 'mailto:contact@example.org' in client.get("/data-deletion").text
+
+
+def test_health_reports_whatsapp_config_without_secrets(client, wa):
+    h = client.get("/api/health").json()["whatsapp_config"]
+    assert h == {"WHATSAPP_TOKEN": True, "WHATSAPP_PHONE_NUMBER_ID": True, "WHATSAPP_APP_SECRET": True,
+                 "WHATSAPP_VERIFY_TOKEN_length": len("verif-123")}
+    assert "verif-123" not in client.get("/api/health").text and "wa-token" not in client.get("/api/health").text
