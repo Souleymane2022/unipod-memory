@@ -170,5 +170,16 @@ def test_legal_pages_for_meta(client, monkeypatch):
 def test_health_reports_whatsapp_config_without_secrets(client, wa):
     h = client.get("/api/health").json()["whatsapp_config"]
     assert h == {"WHATSAPP_TOKEN": True, "WHATSAPP_PHONE_NUMBER_ID": True, "WHATSAPP_APP_SECRET": True,
-                 "WHATSAPP_VERIFY_TOKEN_length": len("verif-123")}
+                 "WHATSAPP_VERIFY_TOKEN_length": len("verif-123"), "WHATSAPP_ALLOWED_NUMBERS_count": 0}
     assert "verif-123" not in client.get("/api/health").text and "wa-token" not in client.get("/api/health").text
+
+
+def test_recent_events_in_health(client, wa, monkeypatch):
+    channels.RECENT_EVENTS.clear()
+    monkeypatch.setattr(main.services().settings, "whatsapp_allowed_numbers", {"23566111111"})
+    _post_wa(client, _wa_payload("aide", sender="23566000000", msg_id="e1"))
+    _post_wa(client, _wa_payload("aide", sender="23566111111", msg_id="e2"))
+    events = client.get("/api/health").json()["recent_messages"]
+    statuses = [e["status"] for e in events]
+    assert statuses[:3] == ["réponse_envoyée", "message_reçu", "numéro_non_autorisé"]
+    assert events[2]["from"] == "…0000" and "23566000000" not in json.dumps(events)

@@ -15,7 +15,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
-from collections import OrderedDict
+from collections import OrderedDict, deque
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -45,6 +46,16 @@ class _Seen:
 
 
 _seen = _Seen()
+
+# Journal des derniers événements (affiché dans /api/health) pour diagnostiquer sans accès aux logs.
+# Numéros masqués : seuls les 4 derniers chiffres apparaissent.
+RECENT_EVENTS: deque = deque(maxlen=10)
+
+
+def _event(channel: str, status: str, sender: str = "", detail: str = "") -> None:
+    RECENT_EVENTS.appendleft({
+        "time": datetime.now(timezone.utc).strftime("%H:%M:%S UTC"), "channel": channel, "status": status,
+        "from": f"…{sender[-4:]}" if sender else "", "detail": detail[:200]})
 
 
 def _services():
@@ -77,9 +88,13 @@ def _wa_send(settings, to: str, body: str, reply_to: str | None = None) -> None:
                        headers={"Authorization": f"Bearer {settings.whatsapp_token}"})
     except httpx.HTTPError as exc:  # ne jamais faire échouer le webhook : Meta renverrait le message en boucle
         log.error("Envoi WhatsApp impossible (réseau) : %s", exc)
+        _event("whatsapp", "erreur_envoi", to, f"réseau : {exc}")
         return
     if r.status_code >= 400:
         log.error("Envoi WhatsApp impossible (HTTP %s) : %s", r.status_code, r.text[:300])
+        _event("whatsapp", "erreur_envoi", to, f"HTTP {r.status_code} : {r.text[:180]}")
+    else:
+        _event("whatsapp", "réponse_envoyée", to)
 
 
 def _wa_signature_ok(settings, raw: bytes, header: str | None) -> bool:
@@ -106,9 +121,11 @@ async def whatsapp_webhook(request: Request):
     s = svc.settings
     raw = await request.body()
     if not _wa_signature_ok(s, raw, request.headers.get("x-hub-signature-256")):
+        _event("whatsapp", "signature_invalide", detail="vérifier WHATSAPP_APP_SECRET")
         raise HTTPException(401, "Signature invalide")
     if not (s.whatsapp_token and s.whatsapp_phone_number_id):
         log.error("WhatsApp non configuré (WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID)")
+        _event("whatsapp", "non_configuré", detail="WHATSAPP_TOKEN ou WHATSAPP_PHONE_NUMBER_ID manquant")
         return {"status": "ignored"}
     data = await request.json()
     for entry in data.get("entry", []):
@@ -119,7 +136,11 @@ async def whatsapp_webhook(request: Request):
                     continue
                 if s.whatsapp_allowed_numbers and sender not in s.whatsapp_allowed_numbers:
                     log.info("Message WhatsApp ignoré (numéro non autorisé) : %s", sender)
+                    _event("whatsapp", "numéro_non_autorisé", sender,
+                           f"expéditeur …{sender[-4:]} absent de WHATSAPP_ALLOWED_NUMBERS "
+                           f"({len(s.whatsapp_allowed_numbers)} numéro(s) configuré(s))")
                     continue
+                _event("whatsapp", "message_reçu", sender, m.get("type", ""))
                 body = _safe_reply(m["text"].get("body", "") if m.get("type") == "text" else None, "whatsapp", svc)
                 _wa_send(s, sender, body, reply_to=msg_id)
     return {"status": "ok"}  # 200 rapide, sinon Meta renvoie le message

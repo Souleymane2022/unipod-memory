@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from .chunker import chunk_document
 from .config import ROOT_DIR, get_settings
+from .channels import RECENT_EVENTS
 from .channels import router as channels_router
 from .i18n import DEFAULT_LANG, msg, normalize_lang
 from .insights import summarize
@@ -163,7 +164,10 @@ def health():
             "whatsapp_config": {"WHATSAPP_TOKEN": bool(s.settings.whatsapp_token),
                                 "WHATSAPP_PHONE_NUMBER_ID": bool(s.settings.whatsapp_phone_number_id),
                                 "WHATSAPP_APP_SECRET": bool(s.settings.whatsapp_app_secret),
-                                "WHATSAPP_VERIFY_TOKEN_length": len(s.settings.whatsapp_verify_token)},
+                                "WHATSAPP_VERIFY_TOKEN_length": len(s.settings.whatsapp_verify_token),
+                                "WHATSAPP_ALLOWED_NUMBERS_count": len(s.settings.whatsapp_allowed_numbers)},
+            # Derniers messages reçus par les webhooks (instance courante) : diagnostic sans accès aux logs
+            "recent_messages": list(RECENT_EVENTS),
             # Commit déployé (fourni par Vercel) : permet de vérifier quelle version tourne
             "version": (os.getenv("VERCEL_GIT_COMMIT_SHA") or "")[:7] or "local"}
 
