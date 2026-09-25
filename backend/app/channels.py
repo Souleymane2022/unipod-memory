@@ -330,6 +330,16 @@ def telegram_setup(request: Request, key: str = ""):
         raise HTTPException(400, "TELEGRAM_BOT_TOKEN manquant")
     if not s.telegram_webhook_secret or not hmac.compare_digest(key, s.telegram_webhook_secret):
         raise HTTPException(403, "Paramètre key invalide (doit valoir TELEGRAM_WEBHOOK_SECRET)")
+    # Sécurité : on vérifie d'abord à quel bot appartient le jeton, pour ne jamais rediriger un autre bot par erreur
+    me = _tg_api(s, "getMe").get("result")
+    me = me if isinstance(me, dict) else {}
+    actual = me.get("username") or ""
+    expected = s.telegram_bot_username
+    if not expected or actual.lower() != expected.lower():
+        raise HTTPException(409, (
+            f"Le jeton TELEGRAM_BOT_TOKEN appartient au bot @{actual or '?'}, mais TELEGRAM_BOT_USERNAME vaut "
+            f"« {expected or '(vide)'} ». Rien n'a été modifié. Mettez dans Vercel le jeton du bot voulu et son nom "
+            f"(sans @), redéployez, puis rouvrez ce lien."))
     url = str(request.base_url).rstrip("/").replace("http://", "https://") + "/api/telegram/webhook"
     result = _tg_api(s, "setWebhook", url=url, secret_token=s.telegram_webhook_secret,
                      allowed_updates=["message", "edited_message"], drop_pending_updates=True)
@@ -342,8 +352,4 @@ def telegram_setup(request: Request, key: str = ""):
                                                  **extra).get("ok")
         profile[f"short_description_{lang}"] = _tg_api(s, "setMyShortDescription",
                                                        short_description=TELEGRAM_SHORT[lang], **extra).get("ok")
-    me = _tg_api(s, "getMe").get("result")
-    me = me if isinstance(me, dict) else {}
-    return {"webhook": url, "telegram": result, "profile": profile, "bot": me.get("username"),
-            "hint": None if s.telegram_bot_username else
-            f"Ajoutez TELEGRAM_BOT_USERNAME={me.get('username', '<nom du bot>')} dans Vercel pour afficher le bot sur le site"}
+    return {"webhook": url, "telegram": result, "profile": profile, "bot": actual}

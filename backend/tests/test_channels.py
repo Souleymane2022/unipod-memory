@@ -111,11 +111,13 @@ def tg(client, monkeypatch):
     s = main.services().settings
     monkeypatch.setattr(s, "telegram_bot_token", "123:ABC")
     monkeypatch.setattr(s, "telegram_webhook_secret", "tg-secret")
+    monkeypatch.setattr(s, "telegram_bot_username", "UniPodsMemoryBot")
     calls = []
 
     def fake_post(url, json=None, headers=None, timeout=None):
         calls.append({"url": url, "json": json})
-        return httpx.Response(200, json={"ok": True, "result": True}, request=httpx.Request("POST", url))
+        result = {"id": 1, "is_bot": True, "username": "UniPodsMemoryBot"} if url.endswith("/getMe") else True
+        return httpx.Response(200, json={"ok": True, "result": result}, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(channels.httpx, "post", fake_post)
     monkeypatch.setattr(channels, "_seen", channels._Seen())
@@ -297,3 +299,10 @@ def test_telegram_release(client, tg, monkeypatch):
     assert r["résultat"]["webhook_supprimé"] is True
     descriptions = [c["json"] for c in tg if c["url"].endswith("/setMyDescription")]
     assert all(d["description"] == "" for d in descriptions)
+
+
+def test_telegram_setup_refuses_wrong_bot(client, tg, monkeypatch):
+    monkeypatch.setattr(main.services().settings, "telegram_bot_username", "UniPodsMemory2026Bot")
+    r = client.get("/api/telegram/setup", params={"key": "tg-secret"})
+    assert r.status_code == 409 and "@UniPodsMemoryBot" in r.json()["detail"]
+    assert [c["url"].rsplit("/", 1)[-1] for c in tg] == ["getMe"]  # aucun setWebhook
