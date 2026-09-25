@@ -22,6 +22,9 @@ const I18N = {
       "Quel est le salaire du directeur de l'UniPod ?",
     ],
     placeholder: "Ex. : Quand a lieu la prochaine réunion ?", ask_btn: "Demander",
+    mic_start: "Poser la question à voix haute", mic_stop: "Arrêter l'écoute", listening: "Je vous écoute…",
+    mic_denied: "Micro refusé : autorisez l'accès au microphone dans le navigateur.",
+    speak: "Écouter la réponse", stop_speak: "Arrêter la lecture",
     searching: "Recherche dans la mémoire du groupe…",
     mode_extractive: "Mode extractif (sans LLM) : citations directes des sources.",
     mode_llm: (m) => `Réponse rédigée par ${m} à partir des sources.`,
@@ -70,6 +73,9 @@ const I18N = {
       "What is the director's salary?",
     ],
     placeholder: "E.g.: When is the next meeting?", ask_btn: "Ask",
+    mic_start: "Ask your question out loud", mic_stop: "Stop listening", listening: "Listening…",
+    mic_denied: "Microphone blocked: allow microphone access in your browser.",
+    speak: "Listen to the answer", stop_speak: "Stop reading",
     searching: "Searching the group's memory…",
     mode_extractive: "Extractive mode (no LLM): direct quotes from the sources.",
     mode_llm: (m) => `Answer written by ${m} from the sources.`,
@@ -122,6 +128,7 @@ function applyLang() {
   document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => ask(c.textContent)));
   document.querySelectorAll(".lang-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
   if (lastHealth) renderStatus(lastHealth);
+  updateVoiceLabels();
   loadDocuments();
 }
 
@@ -235,22 +242,31 @@ function renderAnswer(r) {
     </div>`).join("");
   const mode = r.mode === "extractive" ? t("mode_extractive") :
                r.mode && r.mode.startsWith("llm") ? t("mode_llm", esc(r.mode.slice(4))) : "";
-  return `${esc(r.answer).replace(/\n/g, "<br>")}${sources ? `<div class="sources">${sources}</div>` : ""}
+  const speakBtn = voice.canSpeak && r.answer
+    ? `<button class="speak-btn" type="button" title="${esc(t("speak"))}" aria-label="${esc(t("speak"))}">🔊</button>` : "";
+  return `${speakBtn}${esc(r.answer).replace(/\n/g, "<br>")}${sources ? `<div class="sources">${sources}</div>` : ""}
     ${r.warning ? `<div class="mode err">${esc(r.warning)}</div>` : ""}<div class="mode">${mode}</div>`;
 }
 
 const history = [];
 
-async function ask(question) {
+async function ask(question, { spoken = false } = {}) {
   history.push(question);
+  stopSpeaking();
   addMsg(esc(question), "user");
   const pending = addMsg(esc(t("searching")), "bot");
-  const btn = $("#ask-form button");
+  const btn = $("#ask-form button[type=submit]");
   btn.disabled = true;
   try {
     const r = await api("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, lang }) });
     pending.innerHTML = renderAnswer(r);
     if (!r.found && r.mode !== "chat") pending.classList.add("notfound");
+    const speakBtn = pending.querySelector(".speak-btn");
+    if (speakBtn) {
+      speakBtn.addEventListener("click", () => toggleSpeak(r.answer, speakBtn));
+      // Question posée à la voix : on répond à la voix.
+      if (spoken) toggleSpeak(r.answer, speakBtn);
+    }
   } catch (e) {
     pending.innerHTML = `<span class="err">${esc(e.message)}</span>`;
   } finally { btn.disabled = false; }
@@ -263,6 +279,105 @@ $("#ask-form").addEventListener("submit", (e) => {
   $("#question").value = "";
   ask(q);
 });
+
+// ---- voix : dictée de la question (SpeechRecognition) et lecture des réponses (speechSynthesis)
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const voice = { canSpeak: "speechSynthesis" in window, recognizer: null, listening: false, speakingBtn: null };
+const speechLang = (l = lang) => (l === "fr" ? "fr-FR" : "en-US");
+
+// Les citations restent dans leur langue d'origine : chaque phrase est lue avec la voix de sa langue.
+const FR_WORDS = /\b(le|la|les|des|du|une|est|sont|pour|avec|dans|qui|que|il|nous|vous|pas|au|aux|être|été|à)\b/gi;
+const EN_WORDS = /\b(the|is|are|for|with|in|who|that|it|we|you|not|to|of|and|was|be)\b/gi;
+function sentenceLang(text) {
+  const fr = (text.match(FR_WORDS) || []).length, en = (text.match(EN_WORDS) || []).length;
+  return fr > en ? "fr" : en > fr ? "en" : lang;
+}
+
+function pickVoice(l) {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find((v) => v.lang === speechLang(l) && /google|natural|online/i.test(v.name))
+      || voices.find((v) => v.lang === speechLang(l))
+      || voices.find((v) => v.lang.toLowerCase().startsWith(l)) || null;
+}
+
+function stopSpeaking() {
+  if (!voice.canSpeak) return;
+  window.speechSynthesis.cancel();
+  if (voice.speakingBtn) { voice.speakingBtn.textContent = "🔊"; voice.speakingBtn.title = t("speak"); }
+  voice.speakingBtn = null;
+}
+
+function toggleSpeak(text, btn) {
+  if (voice.speakingBtn === btn) { stopSpeaking(); return; }
+  stopSpeaking();
+  // On lit la réponse sans les renvois [1], [2]… ; phrase par phrase, car Chrome coupe les longues lectures.
+  const clean = text.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, "").replace(/[*_#>`]/g, "");
+  const sentences = clean.split(/(?<=[.!?…:])\s+|\s*[•«»\n]\s*/).map((x) => x.replace(/\s+/g, " ").trim())
+    .filter((x) => /[\p{L}\d]/u.test(x));
+  if (!sentences.length) return;
+  voice.speakingBtn = btn;
+  btn.textContent = "⏹"; btn.title = t("stop_speak");
+  sentences.forEach((sentence, i) => {
+    const u = new SpeechSynthesisUtterance(sentence.trim());
+    const l = sentenceLang(sentence);
+    u.lang = speechLang(l);
+    const v = pickVoice(l);
+    if (v) u.voice = v;
+    if (i === sentences.length - 1) u.onend = () => { if (voice.speakingBtn === btn) stopSpeaking(); };
+    window.speechSynthesis.speak(u);
+  });
+}
+
+function updateVoiceLabels() {
+  const mic = $("#mic-btn");
+  if (!mic) return;
+  const label = t(voice.listening ? "mic_stop" : "mic_start");
+  mic.title = label; mic.setAttribute("aria-label", label);
+  if (voice.listening) $("#question").placeholder = t("listening");
+  else $("#question").placeholder = t("placeholder");
+}
+
+function stopListening() {
+  voice.listening = false;
+  $("#mic-btn").classList.remove("listening");
+  updateVoiceLabels();
+}
+
+if (Recognition) {
+  const mic = $("#mic-btn");
+  mic.hidden = false;
+  mic.addEventListener("click", () => {
+    if (voice.listening) { voice.recognizer.stop(); return; }
+    stopSpeaking();
+    const rec = new Recognition();
+    rec.lang = speechLang();
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    let finalText = "";
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      $("#question").value = (finalText + interim).trim();
+    };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") addMsg(`<span class="err">${esc(t("mic_denied"))}</span>`, "bot");
+    };
+    rec.onend = () => {
+      stopListening();
+      const q = finalText.trim();
+      if (q) { $("#question").value = ""; ask(q, { spoken: true }); }
+    };
+    voice.recognizer = rec;
+    voice.listening = true;
+    mic.classList.add("listening");
+    updateVoiceLabels();
+    rec.start();
+  });
+}
+if (voice.canSpeak) window.speechSynthesis.onvoiceschanged = () => {}; // précharge la liste des voix
 
 // ---- ingestion
 $("#ingest-form").addEventListener("submit", async (e) => {

@@ -36,6 +36,7 @@ le refus honnête. Sur WhatsApp et Telegram : `aide` / `/aide`, `documents`, `r�
 | ✅ | **Chatbot WhatsApp** (API Cloud officielle de Meta, webhook signé) — en ligne, réponses reçues sur un vrai téléphone ; numéro de test Meta (destinataires autorisés uniquement) | fait |
 | ✅ | **Chatbot Telegram** (webhook sur Vercel, menu de commandes FR/EN, groupes) — en ligne, ouvert à tous | fait |
 | ✅ | **Bilingue français / anglais** : interface FR/EN, réponses dans la langue choisie, questions en anglais sur des sources en français (et inversement) | fait |
+| ✅ | **Chatbot vocal** (site) : 🎤 poser la question à voix haute, 🔊 réponse lue à voix haute (lecture automatique quand la question est dictée ; chaque phrase avec la voix de sa langue). API vocales du navigateur, sans clé ni coût — dictée sur Chrome/Edge/Safari | fait |
 | ✅ | **Bonus** : résumé d'une conversation/réunion + décisions + tâches (responsable, échéance) | fait |
 
 ## Architecture
