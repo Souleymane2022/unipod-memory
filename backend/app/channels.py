@@ -279,6 +279,31 @@ TELEGRAM_SHORT = {"fr": "La mémoire collective de la communauté UniPod 🧠",
                   "en": "The UniPod community's collective memory 🧠"}
 
 
+@router.get("/api/telegram/release", include_in_schema=False)
+def telegram_release(key: str = ""):
+    """Libère le bot actuellement configuré (TELEGRAM_BOT_TOKEN) : supprime le webhook vers ce site, le menu
+    de commandes et les descriptions posés par /api/telegram/setup. Utile si le mauvais bot a été branché.
+    https://<site>/api/telegram/release?key=<TELEGRAM_WEBHOOK_SECRET>"""
+    from .config import get_settings
+
+    s = get_settings()
+    if not s.telegram_bot_token:
+        raise HTTPException(400, "TELEGRAM_BOT_TOKEN manquant")
+    if not s.telegram_webhook_secret or not hmac.compare_digest(key, s.telegram_webhook_secret):
+        raise HTTPException(403, "Paramètre key invalide (doit valoir TELEGRAM_WEBHOOK_SECRET)")
+    done = {"webhook_supprimé": _tg_api(s, "deleteWebhook").get("ok")}
+    for lang, code in (("fr", None), ("en", "en")):
+        extra = {"language_code": code} if code else {}
+        done[f"commandes_{lang}"] = _tg_api(s, "deleteMyCommands", **extra).get("ok")
+        done[f"description_{lang}"] = _tg_api(s, "setMyDescription", description="", **extra).get("ok")
+        done[f"description_courte_{lang}"] = _tg_api(s, "setMyShortDescription", short_description="",
+                                                     **extra).get("ok")
+    me = _tg_api(s, "getMe").get("result")
+    return {"bot_libéré": me.get("username") if isinstance(me, dict) else None, "résultat": done,
+            "suite": "Remplacez TELEGRAM_BOT_TOKEN et TELEGRAM_BOT_USERNAME dans Vercel par ceux du nouveau bot, "
+                     "redéployez, puis ouvrez /api/telegram/setup?key=…"}
+
+
 @router.get("/api/telegram/qr.svg", include_in_schema=False)
 def telegram_qr():
     """QR code qui ouvre la discussion Telegram avec le bot."""

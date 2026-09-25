@@ -285,3 +285,15 @@ def test_telegram_qr_and_site_card(client, monkeypatch):
     monkeypatch.setattr(main.services().settings, "telegram_bot_username", "UniPodsMemoryBot")
     assert client.get("/api/health").json()["telegram_username"] == "UniPodsMemoryBot"
     assert 'id="tg-card"' in client.get("/").text
+
+
+def test_telegram_release(client, tg, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:ABC")
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "tg-secret")
+    assert client.get("/api/telegram/release", params={"key": "faux"}).status_code == 403
+    r = client.get("/api/telegram/release", params={"key": "tg-secret"}).json()
+    methods = [c["url"].rsplit("/", 1)[-1] for c in tg]
+    assert methods[0] == "deleteWebhook" and methods.count("deleteMyCommands") == 2
+    assert r["résultat"]["webhook_supprimé"] is True
+    descriptions = [c["json"] for c in tg if c["url"].endswith("/setMyDescription")]
+    assert all(d["description"] == "" for d in descriptions)
