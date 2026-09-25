@@ -40,15 +40,20 @@ def main() -> None:
                 msg = upd.get("message") or {}
                 if "chat" not in msg:
                     continue
-                text, audio, spoken = msg.get("text"), msg.get("voice") or msg.get("audio"), None
-                if audio and audio.get("file_id"):  # note vocale : même traitement que le webhook
-                    body, spoken = channels._voice_turn(
+                text, audio, spoken, image = msg.get("text"), msg.get("voice") or msg.get("audio"), None, None
+                chat = str(msg["chat"]["id"])
+                if text and (img := channels._image_turn(text, "telegram", svc, chat)):  # « génère une image… »
+                    body, image = img
+                elif audio and audio.get("file_id"):  # note vocale : même traitement que le webhook
+                    body, spoken, image = channels._voice_turn(
                         lambda: channels._tg_download(svc.settings, audio["file_id"]),
                         audio.get("mime_type", "audio/ogg"), "telegram", svc, str(msg["chat"]["id"]))
                 else:
                     body = reply(text, "telegram", svc) if text else non_text_reply()
                 httpx.post(f"{tg}/sendMessage", json={"chat_id": msg["chat"]["id"], "text": body,
                                                        "reply_to_message_id": msg["message_id"]}, timeout=30)
+                if image:
+                    channels._tg_send_photo(svc.settings, msg["chat"]["id"], image, "")
                 if mp3 := channels._voice_audio(spoken, "telegram", svc, str(msg["chat"]["id"])):
                     channels._tg_send_voice(svc.settings, msg["chat"]["id"], mp3, msg["message_id"])
         except httpx.HTTPError as exc:

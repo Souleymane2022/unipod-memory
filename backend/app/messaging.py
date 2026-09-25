@@ -19,7 +19,8 @@ HELP = {
         "Exemples :\n"
         "• Quand a lieu la prochaine réunion ?\n"
         "• Résume le document METI\n"
-        "🎤 Vous pouvez aussi m'envoyer un *message vocal* : je réponds par écrit et à voix haute.\n\n"
+        "🎤 Vous pouvez aussi m'envoyer un *message vocal* : je réponds par écrit et à voix haute.\n"
+        "🎨 Et je crée des images : *génère une image de …*\n\n"
         "Commandes :\n"
         "• *documents* : liste des sources indexées\n"
         "• *résumé <nom du fichier>* : résumé, décisions et tâches\n"
@@ -32,7 +33,8 @@ HELP = {
         "Examples:\n"
         "• When is the next meeting?\n"
         "• Summarize the METI document\n"
-        "🎤 You can also send me a *voice message*: I reply in writing and out loud.\n\n"
+        "🎤 You can also send me a *voice message*: I reply in writing and out loud.\n"
+        "🎨 And I create images: *generate an image of …*\n\n"
         "Commands:\n"
         "• *documents*: list indexed sources\n"
         "• *summary <file name>*: summary, decisions and tasks\n"
@@ -143,6 +145,19 @@ VOICE = {
                     "en": "🎤 Voice messages are not enabled (no transcription model configured). "
                           "Please type your question 🙂"},
 }
+
+
+IMAGE = {
+    "caption": {"fr": "🎨 Image générée pour : « {prompt} »", "en": "🎨 Image generated for: \"{prompt}\""},
+    "ask": {"fr": "🎨 Que voulez-vous que je dessine ? Exemple : *génère une image d'un fablab futuriste au Tchad*",
+            "en": "🎨 What should I draw? Example: *generate an image of a futuristic fablab in Chad*"},
+    "failed": {"fr": "🎨 Je n'ai pas pu générer l'image pour le moment. Réessayez dans un instant avec une autre description.",
+               "en": "🎨 I couldn't generate the image right now. Try again in a moment with another description."},
+}
+
+
+def image_text(key: str, lang: str, **kw) -> str:
+    return IMAGE[key][lang if lang in ("fr", "en") else "fr"].format(**kw)
 
 
 def voice_text(key: str, lang: str | None = None, **kw) -> str:

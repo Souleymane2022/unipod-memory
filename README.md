@@ -38,6 +38,7 @@ le refus honnête. Sur WhatsApp et Telegram : `aide` / `/aide`, `documents`, `r�
 | ✅ | **Bilingue français / anglais** : interface FR/EN, réponses dans la langue choisie, questions en anglais sur des sources en français (et inversement) | fait |
 | ✅ | **Chatbot vocal** (site) : 🎤 poser la question à voix haute, 🔊 réponse lue à voix haute (lecture automatique quand la question est dictée ; chaque phrase avec la voix de sa langue). API vocales du navigateur, sans clé ni coût — dictée sur Chrome/Edge/Safari | fait |
 | ✅ | **Messages vocaux WhatsApp & Telegram** : la note vocale est transcrite par Gemini (ou Whisper avec `LLM_PROVIDER=openai`), le bot répond par écrit (« 🎤 J'ai entendu : … » + réponse sourcée) puis par une **note vocale** (Gemini TTS encodé en MP3). Si la voix échoue (quota), la réponse écrite part quand même | fait |
+| ✅ | **Génération d'images** (site, WhatsApp, Telegram, à l'écrit ou par message vocal) : « génère une image de… », « dessine-moi… », `/image …`, « draw a… » → image créée par Gemini (`gemini-2.5-flash-image`), avec repli gratuit sans clé sur Pollinations si le quota Gemini ne le permet pas | fait |
 | ✅ | **Bonus** : résumé d'une conversation/réunion + décisions + tâches (responsable, échéance) | fait |
 
 ## Architecture
@@ -340,6 +341,8 @@ multilingue (`EMBEDDING_BACKEND=sentence-transformers`, hors Vercel).
 | `EMBEDDING_BACKEND` | `default` | `sentence-transformers` (ex. `paraphrase-multilingual-MiniLM-L12-v2`, meilleur en français) ou `openai` — **réindexer avec `--reset` après changement** |
 | `CHROMA_DIR` | `data/chroma` | emplacement de la base |
 | `VOICE_REPLIES` | `true` | réponse en note vocale aux messages vocaux WhatsApp/Telegram (`false` = réponse écrite seulement, économise le quota Gemini) |
+| `IMAGE_MODEL` | `gemini-2.5-flash-image` | modèle Gemini de génération d'images |
+| `IMAGE_FALLBACK` | `pollinations` | repli gratuit si Gemini refuse (quota) ; `none` pour le désactiver. `POLLINATIONS_TOKEN` facultatif |
 | `TTS_MODEL` | `gemini-2.5-flash-preview-tts` | modèle de synthèse vocale Gemini (repli automatique sur d'autres modèles TTS si retiré) |
 
 ## Bilan

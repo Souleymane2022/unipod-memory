@@ -10,6 +10,8 @@ Telegram
 Messages vocaux (voice.py) : la note vocale est téléchargée, transcrite, puis traitée comme une question écrite.
 Le bot répond par écrit (« 🎤 J'ai entendu : … » + réponse citée) puis, si possible, par une note vocale.
 
+Images : « génère une image de… » (écrit ou vocal) -> image générée (images.py) envoyée avec une légende.
+
 Le traitement est synchrone (quelques secondes avec un LLM) puis on renvoie 200 : adapté au serverless.
 Meta renvoie parfois un même message : les identifiants déjà traités sont ignorés.
 """
@@ -27,9 +29,9 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse, Response
 
-from . import voice
+from . import images, voice
 from .i18n import detect_lang
-from .messaging import error_reply, non_text_reply, reply, voice_text
+from .messaging import error_reply, image_text, non_text_reply, reply, voice_text
 
 log = logging.getLogger("unipods.channels")
 router = APIRouter()
@@ -85,22 +87,44 @@ def _safe_reply(text: str | None, channel: str, svc) -> str:
         return error_reply()
 
 
-def _voice_turn(download, mime: str, channel: str, svc, sender: str) -> tuple[str, str | None]:
-    """Note vocale -> (réponse écrite, texte à lire en vocal ou None). Ne lève jamais d'exception."""
+def _image_turn(text: str, channel: str, svc, sender: str) -> tuple[str, tuple[bytes, str] | None] | None:
+    """Demande d'image -> (légende ou message d'erreur, (octets, type MIME) ou None) ; None si ce n'en est pas une."""
+    prompt = images.image_prompt(text)
+    if prompt is None:
+        return None
+    lang = detect_lang(text)
+    if not prompt:
+        return image_text("ask", lang), None
+    try:
+        data, mime, provider = images.generate_image(prompt, svc.llm)
+    except Exception as exc:
+        log.warning("Image %s impossible : %s", channel, exc)
+        _event(channel, "image_erreur", sender, str(exc))
+        return image_text("failed", lang), None
+    _event(channel, "image_générée", sender, provider)
+    return image_text("caption", lang, prompt=prompt), (data, mime)
+
+
+def _voice_turn(download, mime: str, channel: str, svc, sender: str) -> tuple[str, str | None, tuple | None]:
+    """Note vocale -> (réponse écrite, texte à lire en vocal ou None, image demandée ou None).
+    Ne lève jamais d'exception."""
     if not voice.can_transcribe(svc.llm):
         _event(channel, "vocal_non_activé", sender, f"fournisseur LLM : {svc.llm.provider}")
-        return voice_text("unavailable"), None
+        return voice_text("unavailable"), None, None
     try:
         heard = voice.transcribe(download(), mime, svc.llm)
     except Exception as exc:
         log.warning("Note vocale %s non transcrite : %s", channel, exc)
         _event(channel, "vocal_erreur", sender, str(exc))
-        return voice_text("failed"), None
+        return voice_text("failed"), None, None
     if not heard:
-        return voice_text("empty"), None
+        return voice_text("empty"), None, None
     _event(channel, "vocal_transcrit", sender, f"{len(heard.split())} mots")
+    header = voice_text("heard", detect_lang(heard), text=heard)
+    if img := _image_turn(heard, channel, svc, sender):
+        return header + "\n\n" + img[0], None, img[1]
     answer = _safe_reply(heard, channel, svc)
-    return voice_text("heard", detect_lang(heard), text=heard) + "\n\n" + answer, answer
+    return header + "\n\n" + answer, answer, None
 
 
 def _voice_audio(answer: str | None, channel: str, svc, sender: str) -> bytes | None:
@@ -147,24 +171,41 @@ def _wa_download(settings, media_id: str) -> bytes:
     return r.content
 
 
-def _wa_send_audio(settings, to: str, mp3: bytes) -> None:
-    """Téléverse la réponse vocale (MP3) puis l'envoie comme message audio."""
+def _wa_send_media(settings, to: str, data: bytes, mime: str, kind: str, caption: str = "",
+                   reply_to: str | None = None) -> bool:
+    """Téléverse un média (audio MP3, image) puis l'envoie ; kind = "audio" ou "image"."""
     base = f"https://graph.facebook.com/{settings.whatsapp_api_version}/{settings.whatsapp_phone_number_id}"
     headers = {"Authorization": f"Bearer {settings.whatsapp_token}"}
+    ext = mime.split("/")[-1].replace("mpeg", "mp3").replace("jpeg", "jpg")
     try:
         up = httpx.post(f"{base}/media", headers=headers, timeout=30,
-                        data={"messaging_product": "whatsapp", "type": "audio/mpeg"},
-                        files={"file": ("reponse.mp3", mp3, "audio/mpeg")})
+                        data={"messaging_product": "whatsapp", "type": mime},
+                        files={"file": (f"unipods.{ext}", data, mime)})
         up.raise_for_status()
-        r = httpx.post(f"{base}/messages", headers=headers, timeout=20, json={
-            "messaging_product": "whatsapp", "recipient_type": "individual", "to": to,
-            "type": "audio", "audio": {"id": up.json()["id"]}})
+        media: dict[str, Any] = {"id": up.json()["id"]}
+        if caption and kind == "image":
+            media["caption"] = caption[:1024]
+        payload: dict[str, Any] = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to,
+                                   "type": kind, kind: media}
+        if reply_to:
+            payload["context"] = {"message_id": reply_to}
+        r = httpx.post(f"{base}/messages", headers=headers, timeout=20, json=payload)
         r.raise_for_status()
     except (httpx.HTTPError, KeyError, ValueError) as exc:
-        log.error("Envoi de la réponse vocale WhatsApp impossible : %s", exc)
-        _event("whatsapp", "voix_erreur", to, f"envoi : {exc}")
-        return
-    _event("whatsapp", "voix_envoyée", to)
+        log.error("Envoi %s WhatsApp impossible : %s", kind, exc)
+        _event("whatsapp", "voix_erreur" if kind == "audio" else "image_erreur", to, f"envoi : {exc}")
+        return False
+    _event("whatsapp", "voix_envoyée" if kind == "audio" else "image_envoyée", to)
+    return True
+
+
+def _wa_send_audio(settings, to: str, mp3: bytes) -> None:
+    _wa_send_media(settings, to, mp3, "audio/mpeg", "audio")
+
+
+def _wa_send_image(settings, to: str, image: tuple[bytes, str], caption: str, reply_to: str | None = None) -> None:
+    if not _wa_send_media(settings, to, image[0], image[1], "image", caption, reply_to):
+        _wa_send(settings, to, image_text("failed", detect_lang(caption)), reply_to=reply_to)
 
 
 def _wa_signature_ok(settings, raw: bytes, header: str | None) -> bool:
@@ -217,13 +258,23 @@ async def whatsapp_webhook(request: Request):
                 _event("whatsapp", "message_reçu", sender, m.get("type", ""))
                 if m.get("type") == "audio" and (m.get("audio") or {}).get("id"):
                     audio = m["audio"]
-                    body, spoken = _voice_turn(lambda: _wa_download(s, audio["id"]), audio.get("mime_type", ""),
-                                               "whatsapp", svc, sender)
+                    body, spoken, image = _voice_turn(lambda: _wa_download(s, audio["id"]),
+                                                      audio.get("mime_type", ""), "whatsapp", svc, sender)
                     _wa_send(s, sender, body, reply_to=msg_id)
+                    if image:
+                        _wa_send_image(s, sender, image, body.rsplit("\n\n", 1)[-1])
                     if mp3 := _voice_audio(spoken, "whatsapp", svc, sender):
                         _wa_send_audio(s, sender, mp3)
                     continue
-                body = _safe_reply(m["text"].get("body", "") if m.get("type") == "text" else None, "whatsapp", svc)
+                text = m["text"].get("body", "") if m.get("type") == "text" else None
+                if text and (img := _image_turn(text, "whatsapp", svc, sender)):
+                    caption, image = img
+                    if image:
+                        _wa_send_image(s, sender, image, caption, reply_to=msg_id)
+                    else:
+                        _wa_send(s, sender, caption, reply_to=msg_id)
+                    continue
+                body = _safe_reply(text, "whatsapp", svc)
                 _wa_send(s, sender, body, reply_to=msg_id)
     return {"status": "ok"}  # 200 rapide, sinon Meta renvoie le message
 
@@ -332,6 +383,25 @@ def _tg_send_voice(settings, chat_id, mp3: bytes, reply_to: int | None = None) -
            "" if ok else (r.text[:180] if r is not None else "réseau"))
 
 
+def _tg_send_photo(settings, chat_id, image: tuple[bytes, str], caption: str, reply_to: int | None = None) -> bool:
+    data = {"chat_id": str(chat_id)}
+    if caption:
+        data["caption"] = caption[:1024]
+    if reply_to:
+        data["reply_to_message_id"] = str(reply_to)
+    ext = image[1].split("/")[-1].replace("jpeg", "jpg")
+    try:
+        r = httpx.post(f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendPhoto", data=data,
+                       files={"photo": (f"unipods.{ext}", image[0], image[1])}, timeout=30)
+        ok = r.status_code < 400
+    except httpx.HTTPError as exc:
+        ok, r = False, None
+        log.error("sendPhoto impossible : %s", exc)
+    _event("telegram", "image_envoyée" if ok else "image_erreur", str(chat_id),
+           "" if ok else (r.text[:180] if r is not None else "réseau"))
+    return ok
+
+
 @router.post("/api/telegram/webhook", include_in_schema=False)
 async def telegram_webhook(request: Request):
     svc = _services()
@@ -351,11 +421,13 @@ async def telegram_webhook(request: Request):
     if audio and audio.get("file_id"):
         _event("telegram", "message_reçu", sender, "vocal")
         _tg_api(s, "sendChatAction", chat_id=chat_id, action="typing")
-        body, spoken = _voice_turn(lambda: _tg_download(s, audio["file_id"]), audio.get("mime_type", "audio/ogg"),
-                                   "telegram", svc, sender)
+        body, spoken, image = _voice_turn(lambda: _tg_download(s, audio["file_id"]),
+                                          audio.get("mime_type", "audio/ogg"), "telegram", svc, sender)
         result = _tg_api(s, "sendMessage", chat_id=chat_id, text=body, reply_to_message_id=msg.get("message_id"))
         _event("telegram", "réponse_envoyée" if result.get("ok") else "erreur_envoi", sender,
                "" if result.get("ok") else str(result.get("description", ""))[:180])
+        if image:
+            _tg_send_photo(s, chat_id, image, "")
         if mp3 := _voice_audio(spoken, "telegram", svc, sender):
             _tg_send_voice(s, chat_id, mp3, msg.get("message_id"))
         return {"status": "ok"}
@@ -364,7 +436,15 @@ async def telegram_webhook(request: Request):
         # Dans un groupe, les commandes arrivent sous la forme « /aide@NomDuBot »
         text = re.sub(r"^(/\w+)@\w+", r"\1", text.strip())
     _event("telegram", "message_reçu", sender, "texte" if text else "non textuel")
-    body = _safe_reply(text, "telegram", svc)
+    if text and images.image_prompt(text):
+        _tg_api(s, "sendChatAction", chat_id=chat_id, action="upload_photo")
+    if text and (img := _image_turn(text, "telegram", svc, sender)):
+        caption, image = img
+        if image and _tg_send_photo(s, chat_id, image, caption, msg.get("message_id")):
+            return {"status": "ok"}
+        body = caption if not image else image_text("failed", detect_lang(text))
+    else:
+        body = _safe_reply(text, "telegram", svc)
     result = _tg_api(s, "sendMessage", chat_id=chat_id, text=body, reply_to_message_id=msg.get("message_id"))
     _event("telegram", "réponse_envoyée" if result.get("ok") else "erreur_envoi", sender,
            "" if result.get("ok") else str(result.get("description", ""))[:180])

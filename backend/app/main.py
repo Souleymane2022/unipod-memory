@@ -4,6 +4,7 @@ Lancement (depuis la racine du dépôt) :  uvicorn backend.app.main:app --reload
 """
 from __future__ import annotations
 
+import base64
 import html
 import logging
 import os
@@ -21,9 +22,11 @@ from .chunker import chunk_document
 from .config import ROOT_DIR, get_settings
 from .channels import RECENT_EVENTS
 from .channels import router as channels_router
-from .i18n import DEFAULT_LANG, msg, normalize_lang
+from .i18n import DEFAULT_LANG, detect_lang, msg, normalize_lang
+from . import images
 from .insights import summarize
 from .llm import LLMClient
+from .messaging import image_text
 from .parsers import DOC_TYPES, extract_text, parse_document
 from .rag import RAGEngine
 from .store import create_store
@@ -209,7 +212,21 @@ def ingest_text(req: TextIngestRequest):
 
 @app.post("/api/ask")
 def ask(req: AskRequest):
-    return services().rag.answer(req.question, req.top_k, req.lang)
+    s = services()
+    prompt = images.image_prompt(req.question)
+    if prompt is not None:  # « génère une image de… » : image générée au lieu d'une recherche
+        lang = req.lang if req.lang in ("fr", "en") else detect_lang(req.question)
+        base = {"question": req.question, "found": True, "sources": [], "mode": "image", "lang": lang}
+        if not prompt:
+            return {**base, "answer": image_text("ask", lang)}
+        try:
+            data, mime, provider = images.generate_image(prompt, s.llm)
+        except Exception as exc:
+            log.warning("Image impossible : %s", exc)
+            return {**base, "found": False, "answer": image_text("failed", lang)}
+        return {**base, "answer": image_text("caption", lang, prompt=prompt), "image_provider": provider,
+                "image": f"data:{mime};base64,{base64.b64encode(data).decode()}"}
+    return s.rag.answer(req.question, req.top_k, req.lang)
 
 
 @app.get("/api/documents")

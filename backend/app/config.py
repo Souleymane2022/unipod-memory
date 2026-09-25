@@ -116,6 +116,11 @@ class Settings:
     tts_model: str = field(default_factory=lambda: _env("TTS_MODEL", "gemini-2.5-flash-preview-tts"))
     stt_model: str = field(default_factory=lambda: _env("STT_MODEL", ""))
 
+    # Génération d'images (images.py) : modèle Gemini, puis repli gratuit « pollinations » (ou « none »)
+    image_model: str = field(default_factory=lambda: _env("IMAGE_MODEL", "gemini-2.5-flash-image"))
+    image_fallback: str = field(default_factory=lambda: _env("IMAGE_FALLBACK", "pollinations").lower())
+    pollinations_token: str = field(default_factory=lambda: _env("POLLINATIONS_TOKEN"))  # facultatif (limites plus larges)
+
     # Traduction des citations (voir translate.py) : auto | llm | mymemory | none
     translation_provider: str = field(default_factory=lambda: _env("TRANSLATION_PROVIDER", "auto").lower())
     mymemory_email: str = field(default_factory=lambda: _env("MYMEMORY_EMAIL"))
