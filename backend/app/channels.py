@@ -7,6 +7,9 @@ Telegram
     POST /api/telegram/webhook   messages entrants ; en-tête secret vérifié avec TELEGRAM_WEBHOOK_SECRET
     GET  /api/telegram/setup?key=<TELEGRAM_WEBHOOK_SECRET>   enregistre le webhook auprès de Telegram (une fois)
 
+Messages vocaux (voice.py) : la note vocale est téléchargée, transcrite, puis traitée comme une question écrite.
+Le bot répond par écrit (« 🎤 J'ai entendu : … » + réponse citée) puis, si possible, par une note vocale.
+
 Le traitement est synchrone (quelques secondes avec un LLM) puis on renvoie 200 : adapté au serverless.
 Meta renvoie parfois un même message : les identifiants déjà traités sont ignorés.
 """
@@ -24,7 +27,9 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse, Response
 
-from .messaging import error_reply, non_text_reply, reply
+from . import voice
+from .i18n import detect_lang
+from .messaging import error_reply, non_text_reply, reply, voice_text
 
 log = logging.getLogger("unipods.channels")
 router = APIRouter()
@@ -80,6 +85,36 @@ def _safe_reply(text: str | None, channel: str, svc) -> str:
         return error_reply()
 
 
+def _voice_turn(download, mime: str, channel: str, svc, sender: str) -> tuple[str, str | None]:
+    """Note vocale -> (réponse écrite, texte à lire en vocal ou None). Ne lève jamais d'exception."""
+    if not voice.can_transcribe(svc.llm):
+        _event(channel, "vocal_non_activé", sender, f"fournisseur LLM : {svc.llm.provider}")
+        return voice_text("unavailable"), None
+    try:
+        heard = voice.transcribe(download(), mime, svc.llm)
+    except Exception as exc:
+        log.warning("Note vocale %s non transcrite : %s", channel, exc)
+        _event(channel, "vocal_erreur", sender, str(exc))
+        return voice_text("failed"), None
+    if not heard:
+        return voice_text("empty"), None
+    _event(channel, "vocal_transcrit", sender, f"{len(heard.split())} mots")
+    answer = _safe_reply(heard, channel, svc)
+    return voice_text("heard", detect_lang(heard), text=heard) + "\n\n" + answer, answer
+
+
+def _voice_audio(answer: str | None, channel: str, svc, sender: str) -> bytes | None:
+    """Réponse vocale MP3, ou None (désactivée, quota, erreur) : le message écrit suffit alors."""
+    if not answer or not voice.can_speak(svc.llm):
+        return None
+    try:
+        return voice.synthesize_mp3(answer, svc.llm)
+    except Exception as exc:
+        log.warning("Réponse vocale %s impossible : %s", channel, exc)
+        _event(channel, "voix_erreur", sender, str(exc))
+        return None
+
+
 # --------------------------------------------------------------------------- WhatsApp
 def _wa_send(settings, to: str, body: str, reply_to: str | None = None) -> None:
     url = (f"https://graph.facebook.com/{settings.whatsapp_api_version}/"
@@ -100,6 +135,36 @@ def _wa_send(settings, to: str, body: str, reply_to: str | None = None) -> None:
         _event("whatsapp", "erreur_envoi", to, f"HTTP {r.status_code} : {r.text[:180]}")
     else:
         _event("whatsapp", "réponse_envoyée", to)
+
+
+def _wa_download(settings, media_id: str) -> bytes:
+    """Contenu d'un média reçu (note vocale) : l'API renvoie d'abord une URL temporaire, protégée par le jeton."""
+    headers = {"Authorization": f"Bearer {settings.whatsapp_token}"}
+    meta = httpx.get(f"https://graph.facebook.com/{settings.whatsapp_api_version}/{media_id}", headers=headers, timeout=20)
+    meta.raise_for_status()
+    r = httpx.get(meta.json()["url"], headers=headers, timeout=30)
+    r.raise_for_status()
+    return r.content
+
+
+def _wa_send_audio(settings, to: str, mp3: bytes) -> None:
+    """Téléverse la réponse vocale (MP3) puis l'envoie comme message audio."""
+    base = f"https://graph.facebook.com/{settings.whatsapp_api_version}/{settings.whatsapp_phone_number_id}"
+    headers = {"Authorization": f"Bearer {settings.whatsapp_token}"}
+    try:
+        up = httpx.post(f"{base}/media", headers=headers, timeout=30,
+                        data={"messaging_product": "whatsapp", "type": "audio/mpeg"},
+                        files={"file": ("reponse.mp3", mp3, "audio/mpeg")})
+        up.raise_for_status()
+        r = httpx.post(f"{base}/messages", headers=headers, timeout=20, json={
+            "messaging_product": "whatsapp", "recipient_type": "individual", "to": to,
+            "type": "audio", "audio": {"id": up.json()["id"]}})
+        r.raise_for_status()
+    except (httpx.HTTPError, KeyError, ValueError) as exc:
+        log.error("Envoi de la réponse vocale WhatsApp impossible : %s", exc)
+        _event("whatsapp", "voix_erreur", to, f"envoi : {exc}")
+        return
+    _event("whatsapp", "voix_envoyée", to)
 
 
 def _wa_signature_ok(settings, raw: bytes, header: str | None) -> bool:
@@ -150,6 +215,14 @@ async def whatsapp_webhook(request: Request):
                            f"({len(s.whatsapp_allowed_numbers)} numéro(s) configuré(s))")
                     continue
                 _event("whatsapp", "message_reçu", sender, m.get("type", ""))
+                if m.get("type") == "audio" and (m.get("audio") or {}).get("id"):
+                    audio = m["audio"]
+                    body, spoken = _voice_turn(lambda: _wa_download(s, audio["id"]), audio.get("mime_type", ""),
+                                               "whatsapp", svc, sender)
+                    _wa_send(s, sender, body, reply_to=msg_id)
+                    if mp3 := _voice_audio(spoken, "whatsapp", svc, sender):
+                        _wa_send_audio(s, sender, mp3)
+                    continue
                 body = _safe_reply(m["text"].get("body", "") if m.get("type") == "text" else None, "whatsapp", svc)
                 _wa_send(s, sender, body, reply_to=msg_id)
     return {"status": "ok"}  # 200 rapide, sinon Meta renvoie le message
@@ -234,6 +307,31 @@ def _tg_api(settings, method: str, **payload) -> dict:
     return data
 
 
+def _tg_download(settings, file_id: str) -> bytes:
+    info = _tg_api(settings, "getFile", file_id=file_id)
+    path = (info.get("result") or {}).get("file_path")
+    if not path:
+        raise RuntimeError(f"getFile : {info.get('description', 'fichier introuvable')}")
+    r = httpx.get(f"https://api.telegram.org/file/bot{settings.telegram_bot_token}/{path}", timeout=30)
+    r.raise_for_status()
+    return r.content
+
+
+def _tg_send_voice(settings, chat_id, mp3: bytes, reply_to: int | None = None) -> None:
+    data = {"chat_id": str(chat_id)}
+    if reply_to:
+        data["reply_to_message_id"] = str(reply_to)
+    try:
+        r = httpx.post(f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendVoice", data=data,
+                       files={"voice": ("reponse.mp3", mp3, "audio/mpeg")}, timeout=30)
+        ok = r.status_code < 400
+    except httpx.HTTPError as exc:
+        ok, r = False, None
+        log.error("sendVoice impossible : %s", exc)
+    _event("telegram", "voix_envoyée" if ok else "voix_erreur", str(chat_id),
+           "" if ok else (r.text[:180] if r is not None else "réseau"))
+
+
 @router.post("/api/telegram/webhook", include_in_schema=False)
 async def telegram_webhook(request: Request):
     svc = _services()
@@ -249,6 +347,18 @@ async def telegram_webhook(request: Request):
     if chat_id is None or _seen.check_and_add(f"tg:{update.get('update_id')}"):
         return {"status": "ok"}
     sender = str((msg.get("from") or {}).get("id", ""))
+    audio = msg.get("voice") or msg.get("audio")
+    if audio and audio.get("file_id"):
+        _event("telegram", "message_reçu", sender, "vocal")
+        _tg_api(s, "sendChatAction", chat_id=chat_id, action="typing")
+        body, spoken = _voice_turn(lambda: _tg_download(s, audio["file_id"]), audio.get("mime_type", "audio/ogg"),
+                                   "telegram", svc, sender)
+        result = _tg_api(s, "sendMessage", chat_id=chat_id, text=body, reply_to_message_id=msg.get("message_id"))
+        _event("telegram", "réponse_envoyée" if result.get("ok") else "erreur_envoi", sender,
+               "" if result.get("ok") else str(result.get("description", ""))[:180])
+        if mp3 := _voice_audio(spoken, "telegram", svc, sender):
+            _tg_send_voice(s, chat_id, mp3, msg.get("message_id"))
+        return {"status": "ok"}
     text = msg.get("text")
     if text:
         # Dans un groupe, les commandes arrivent sous la forme « /aide@NomDuBot »

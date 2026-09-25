@@ -37,6 +37,7 @@ le refus honnête. Sur WhatsApp et Telegram : `aide` / `/aide`, `documents`, `r�
 | ✅ | **Chatbot Telegram** (webhook sur Vercel, menu de commandes FR/EN, groupes) — en ligne, ouvert à tous | fait |
 | ✅ | **Bilingue français / anglais** : interface FR/EN, réponses dans la langue choisie, questions en anglais sur des sources en français (et inversement) | fait |
 | ✅ | **Chatbot vocal** (site) : 🎤 poser la question à voix haute, 🔊 réponse lue à voix haute (lecture automatique quand la question est dictée ; chaque phrase avec la voix de sa langue). API vocales du navigateur, sans clé ni coût — dictée sur Chrome/Edge/Safari | fait |
+| ✅ | **Messages vocaux WhatsApp & Telegram** : la note vocale est transcrite par Gemini (ou Whisper avec `LLM_PROVIDER=openai`), le bot répond par écrit (« 🎤 J'ai entendu : … » + réponse sourcée) puis par une **note vocale** (Gemini TTS encodé en MP3). Si la voix échoue (quota), la réponse écrite part quand même | fait |
 | ✅ | **Bonus** : résumé d'une conversation/réunion + décisions + tâches (responsable, échéance) | fait |
 
 ## Architecture
@@ -338,6 +339,8 @@ multilingue (`EMBEDDING_BACKEND=sentence-transformers`, hors Vercel).
 | `CHUNK_MIN_WORDS` / `CHUNK_MAX_WORDS` | `300` / `500` | taille des chunks |
 | `EMBEDDING_BACKEND` | `default` | `sentence-transformers` (ex. `paraphrase-multilingual-MiniLM-L12-v2`, meilleur en français) ou `openai` — **réindexer avec `--reset` après changement** |
 | `CHROMA_DIR` | `data/chroma` | emplacement de la base |
+| `VOICE_REPLIES` | `true` | réponse en note vocale aux messages vocaux WhatsApp/Telegram (`false` = réponse écrite seulement, économise le quota Gemini) |
+| `TTS_MODEL` | `gemini-2.5-flash-preview-tts` | modèle de synthèse vocale Gemini (repli automatique sur d'autres modèles TTS si retiré) |
 
 ## Bilan
 

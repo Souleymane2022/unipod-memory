@@ -7,6 +7,7 @@ pypdf>=4.0
 segno>=1.6             # QR code du chatbot WhatsApp (pur Python)
 python-dotenv>=1.0
 httpx>=0.27            # appels LLM optionnels (Anthropic / Gemini / OpenAI-compatible / Ollama) et bot Telegram
+lameenc>=1.7           # réponses vocales WhatsApp/Telegram : encodage MP3 (roue précompilée, sans ffmpeg)
 psycopg[binary]>=3.1   # base PostgreSQL + pgvector optionnelle (ex. Neon sur Vercel), active si DATABASE_URL
 
 # Tests

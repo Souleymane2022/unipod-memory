@@ -111,6 +111,11 @@ class Settings:
     openai_api_key: str = field(default_factory=lambda: _env("OPENAI_API_KEY", ""))
     gemini_api_key: str = field(default_factory=lambda: _env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY"))
 
+    # Messages vocaux (voice.py) : transcription par le LLM, réponse vocale Gemini TTS en plus du texte
+    voice_replies: bool = field(default_factory=lambda: _env("VOICE_REPLIES", "true").lower() not in ("0", "false", "no", "non"))
+    tts_model: str = field(default_factory=lambda: _env("TTS_MODEL", "gemini-2.5-flash-preview-tts"))
+    stt_model: str = field(default_factory=lambda: _env("STT_MODEL", ""))
+
     # Traduction des citations (voir translate.py) : auto | llm | mymemory | none
     translation_provider: str = field(default_factory=lambda: _env("TRANSLATION_PROVIDER", "auto").lower())
     mymemory_email: str = field(default_factory=lambda: _env("MYMEMORY_EMAIL"))

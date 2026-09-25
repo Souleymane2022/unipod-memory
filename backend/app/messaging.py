@@ -18,7 +18,8 @@ HELP = {
         "Posez-moi une question sur les messages, les réunions ou les documents : je réponds en citant mes sources.\n\n"
         "Exemples :\n"
         "• Quand a lieu la prochaine réunion ?\n"
-        "• Résume le document METI\n\n"
+        "• Résume le document METI\n"
+        "🎤 Vous pouvez aussi m'envoyer un *message vocal* : je réponds par écrit et à voix haute.\n\n"
         "Commandes :\n"
         "• *documents* : liste des sources indexées\n"
         "• *résumé <nom du fichier>* : résumé, décisions et tâches\n"
@@ -30,7 +31,8 @@ HELP = {
         "Ask me about the group's messages, meetings or documents: I answer with sources.\n\n"
         "Examples:\n"
         "• When is the next meeting?\n"
-        "• Summarize the METI document\n\n"
+        "• Summarize the METI document\n"
+        "🎤 You can also send me a *voice message*: I reply in writing and out loud.\n\n"
         "Commands:\n"
         "• *documents*: list indexed sources\n"
         "• *summary <file name>*: summary, decisions and tasks\n"
@@ -128,6 +130,26 @@ def reply(text: str, channel: str, services) -> str:
 def error_reply() -> str:
     return ("Désolé, une erreur est survenue. Réessayez dans un instant.\n"
             "Sorry, something went wrong. Please try again in a moment.")
+
+
+VOICE = {
+    "heard": {"fr": "🎤 J'ai entendu : « {text} »", "en": "🎤 I heard: \"{text}\""},
+    "empty": {"fr": "🎤 Je n'ai rien entendu d'intelligible dans ce message vocal. Pouvez-vous répéter ou écrire votre question ?",
+              "en": "🎤 I couldn't make out anything in this voice message. Could you repeat or type your question?"},
+    "failed": {"fr": "🎤 Je n'ai pas réussi à écouter ce message vocal. Réessayez dans un instant ou écrivez votre question en texte.",
+               "en": "🎤 I couldn't process this voice message. Try again in a moment or type your question."},
+    "unavailable": {"fr": "🎤 Les messages vocaux ne sont pas activés (aucun modèle de transcription configuré). "
+                          "Écrivez votre question en texte 🙂",
+                    "en": "🎤 Voice messages are not enabled (no transcription model configured). "
+                          "Please type your question 🙂"},
+}
+
+
+def voice_text(key: str, lang: str | None = None, **kw) -> str:
+    """Message lié aux notes vocales ; sans langue connue, bilingue FR puis EN."""
+    if lang:
+        return VOICE[key][lang].format(**kw)
+    return VOICE[key]["fr"].format(**kw) + "\n" + VOICE[key]["en"].format(**kw)
 
 
 def non_text_reply() -> str:

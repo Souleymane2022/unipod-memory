@@ -51,6 +51,12 @@ class LLMError(RuntimeError):
         self.daily_quota = daily_quota  # quota du jour épuisé : inutile de réessayer avec ce modèle
 
 
+def raise_for_status(r: httpx.Response, provider: str) -> None:
+    if r.status_code >= 400:
+        raise LLMError(f"{provider} HTTP {r.status_code}: {_error_message(r)}", r.status_code,
+                       _retry_after(r), daily_quota=_is_daily_quota(r))
+
+
 def _is_daily_quota(r: httpx.Response) -> bool:
     return r.status_code == 429 and ("PerDay" in r.text or "per day" in r.text.lower())
 
@@ -118,8 +124,11 @@ class LLMClient:
         raise AssertionError("inaccessible")
 
     def _complete_once(self, system: str, user: str, max_tokens: int) -> str:
-        """Essaie les modèles disponibles dans l'ordre. Un modèle retiré (404) ou dont le quota du jour est
-        épuisé est mis de côté et on passe au suivant (Gemini uniquement)."""
+        return self.with_models(lambda: self._call(system, user, max_tokens))
+
+    def with_models(self, call):
+        """Essaie les modèles disponibles dans l'ordre (``self.model`` est positionné avant chaque appel). Un
+        modèle retiré (404) ou dont le quota du jour est épuisé est mis de côté et on passe au suivant (Gemini)."""
         now = time.monotonic()
         candidates = [m for m in self._models if self._unavailable_until.get(m, 0) <= now]
         if not candidates:
@@ -129,7 +138,7 @@ class LLMClient:
         for model in candidates:
             self.model = model
             try:
-                return self._call(system, user, max_tokens)
+                return call()
             except LLMError as exc:
                 if self.provider != "gemini" or not (exc.status == 404 or exc.daily_quota):
                     raise
