@@ -161,7 +161,7 @@ function renderWhatsApp(h) {
   const text = lang === "en" ? "help" : "aide";
   $("#wa-link").href = `https://wa.me/${h.whatsapp_number}?text=${text}`;
   $("#wa-number").textContent = "+" + h.whatsapp_number;
-  $("#wa-qr").src = `/api/whatsapp/qr.svg?lang=${lang}`;
+  $("#wa-qr").src = `/api/whatsapp/qr.svg?lang=${lang}&n=${h.whatsapp_number}`;
   card.hidden = false;
 }
 
@@ -170,7 +170,8 @@ function renderTelegram(h) {
   if (!h.telegram_username) { card.hidden = true; return; }
   $("#tg-link").href = `https://t.me/${h.telegram_username}`;
   $("#tg-username").textContent = "@" + h.telegram_username;
-  $("#tg-qr").src = "/api/telegram/qr.svg";
+  // Le nom du bot dans l'adresse : un changement de bot ne réutilise jamais l'ancien QR code en cache
+  $("#tg-qr").src = `/api/telegram/qr.svg?u=${encodeURIComponent(h.telegram_username)}`;
   card.hidden = false;
 }
 
