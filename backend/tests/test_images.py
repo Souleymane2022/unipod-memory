@@ -24,6 +24,9 @@ PNG = b"\x89PNG\r\n\x1a\nfake-image"
     ("image: coucher de soleil à N'Djamena", "coucher de soleil à N'Djamena"),
     ("Fais une affiche pour le hackathon", "affiche pour le hackathon"),
     ("génère une image", ""),
+    ("Générés une image de lunipod", "lunipod"),               # faute de conjugaison réelle (WhatsApp)
+    ("/image Générés une image de lunipod", "lunipod"),        # demande imbriquée dans /image
+    ("Créez une image d'un atelier", "un atelier"),
 ])
 def test_image_requests_detected(text, prompt):
     assert images.image_prompt(text) == prompt
@@ -42,7 +45,38 @@ def _llm(monkeypatch, key="g-key"):
     return LLMClient(Settings())
 
 
-def test_gemini_image(monkeypatch):
+@pytest.fixture
+def raw_prompt(monkeypatch):
+    monkeypatch.setattr(images, "enhance_prompt", lambda prompt, llm: prompt)
+
+
+def test_prompt_enhanced_without_llm():
+    from types import SimpleNamespace
+    llm = SimpleNamespace(enabled=False)
+    p = images.enhance_prompt("lunipod", llm)
+    assert "innovation hub" in p and "UNDP" in p and "photorealistic" in p and "lunipod" not in p.lower()
+    assert "photorealistic" not in images.enhance_prompt("une affiche pour l'UniPod", llm)  # style demandé
+
+
+def test_prompt_rewritten_by_llm(monkeypatch):
+    from types import SimpleNamespace
+    seen = {}
+
+    def complete(system, user, max_tokens=0):
+        seen.update(system=system, user=user)
+        return "A realistic photo of the UNDP UniPod innovation hub in N'Djamena, students around a 3D printer"
+
+    llm = SimpleNamespace(enabled=True, complete=complete)
+    assert images.enhance_prompt("lunipod", llm).startswith("A realistic photo")
+    assert seen["user"] == "lunipod" and "UniPod" in seen["system"]
+
+    def down(*a, **k):
+        raise RuntimeError("quota")
+
+    assert "innovation hub" in images.enhance_prompt("lunipod", SimpleNamespace(enabled=True, complete=down))
+
+
+def test_gemini_image(monkeypatch, raw_prompt):
     llm = _llm(monkeypatch)
     calls = []
 
@@ -58,7 +92,7 @@ def test_gemini_image(monkeypatch):
     assert calls[0][1]["generationConfig"]["responseModalities"] == ["TEXT", "IMAGE"]
 
 
-def test_falls_back_to_pollinations_when_gemini_quota_is_zero(monkeypatch):
+def test_falls_back_to_pollinations_when_gemini_quota_is_zero(monkeypatch, raw_prompt):
     llm = _llm(monkeypatch)
     monkeypatch.setattr(images.httpx, "post", lambda url, **kw: httpx.Response(
         429, json={"error": {"message": "limit: 0"}}, request=httpx.Request("POST", url)))
@@ -74,7 +108,7 @@ def test_falls_back_to_pollinations_when_gemini_quota_is_zero(monkeypatch):
     assert got["url"].endswith("/prompt/un%20chat%20astronaute") and got["params"]["nologo"] == "true"
 
 
-def test_no_generator_raises(monkeypatch):
+def test_no_generator_raises(monkeypatch, raw_prompt):
     monkeypatch.setenv("IMAGE_FALLBACK", "none")
     with pytest.raises(images.ImageError):
         images.generate_image("x", _llm(monkeypatch, key=""))
