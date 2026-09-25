@@ -5,6 +5,20 @@ on manque des réunions. **UniPods Memory** indexe les **messages du groupe**, l
 et les **documents**, puis répond directement aux questions **en citant la source exacte**
 (fichier, auteur, date, horodatage, extrait). Si l'information n'existe pas, il le dit — **sans inventer**.
 
+## Démo en ligne
+
+| Canal | Accès | Pour qui |
+|---|---|---|
+| 🌐 **Site web** (FR/EN) | <https://unipod-memory-iota.vercel.app> | ouvert à tous |
+| ✈️ **Telegram** | [@UniPodsMemory2026Bot](https://t.me/UniPodsMemory2026Bot) | ouvert à tous |
+| 💬 **WhatsApp** | +1 555 191 7088 | **mode test Meta** : seuls les numéros autorisés reçoivent une réponse (5 max.) |
+
+Essayez par exemple : « Que dit le document METI ? », « Quand a lieu la prochaine réunion ? »,
+« What are the hackathon prizes? », ou une question hors sujet (« Quel est le salaire du directeur ? ») pour voir
+le refus honnête. Sur WhatsApp et Telegram : `aide` / `/aide`, `documents`, `résumé <nom du fichier>`.
+
+État du service : <https://unipod-memory-iota.vercel.app/api/health> (version déployée, LLM, base, derniers messages reçus).
+
 ![Démo questions/réponses](docs/demo_questions.png)
 
 ## Fonctionnalités
@@ -14,12 +28,13 @@ et les **documents**, puis répond directement aux questions **en citant la sour
 | ✅ | Ingestion `.txt` / `.md` / `.pdf` / `.docx` (Word) / `.odt` / `.html` (API multipart, API texte JSON, CLI, interface web) | fait |
 | ✅ | Détection auto du type : chat (format `[AAAA-MM-JJ HH:MM] Nom: …` ou export WhatsApp), transcription (`[HH:MM:SS] Nom: …`), document | fait |
 | ✅ | Chunks de 300–500 mots, équilibrés (à un message près, car on ne coupe jamais un message ou une intervention) ; métadonnées source, date(s), auteur(s), type, titre | fait |
-| ✅ | Embeddings locaux gratuits (ONNX all-MiniLM-L6-v2 via ChromaDB) + base vectorielle ChromaDB persistante | fait |
+| ✅ | Embeddings locaux gratuits (ONNX all-MiniLM-L6-v2) ; base vectorielle **ChromaDB** en local, **PostgreSQL + pgvector (Neon)** en production sur Vercel (mémoire permanente) | fait |
 | ✅ | Q/R RAG : recherche hybride (vectorielle + lexicale pondérée IDF), citations avec auteur/date/heure exacts | fait |
 | ✅ | Garde-fou anti-hallucination : seuil de pertinence + réponse « information non disponible » | fait |
-| ✅ | Génération par LLM **optionnelle** (Anthropic, OpenAI ou compatible, Ollama local) ; sinon mode extractif | fait |
+| ✅ | Génération par LLM **optionnelle** : **Gemini** (offre gratuite, utilisé en production), Anthropic, OpenAI ou compatible, Ollama local ; sinon mode extractif | fait |
 | ✅ | Interface web (Q/R, ajout/suppression de documents, résumé) | fait |
-| 🟡 | **Chatbot WhatsApp** (API Cloud officielle de Meta, webhook signé) et **Telegram** (webhook Vercel ou long polling) — testés avec des messages simulés, pas encore avec les vrais services | fait, à valider |
+| ✅ | **Chatbot WhatsApp** (API Cloud officielle de Meta, webhook signé) — en ligne, réponses reçues sur un vrai téléphone ; numéro de test Meta (destinataires autorisés uniquement) | fait |
+| ✅ | **Chatbot Telegram** (webhook sur Vercel, menu de commandes FR/EN, groupes) — en ligne, ouvert à tous | fait |
 | ✅ | **Bilingue français / anglais** : interface FR/EN, réponses dans la langue choisie, questions en anglais sur des sources en français (et inversement) | fait |
 | ✅ | **Bonus** : résumé d'une conversation/réunion + décisions + tâches (responsable, échéance) | fait |
 
@@ -44,7 +59,7 @@ et les **documents**, puis répond directement aux questions **en citant la sour
     messaging.py     commandes et mise en forme communes aux messageries
     telegram_bot.py  bot Telegram en long polling (hors Vercel)
   scripts/ingest_folder.py   indexation d'un dossier en ligne de commande
-  tests/             118 tests pytest (API sur ChromaDB et PostgreSQL, parsing, PDF/docx/odt/html, anti-hallucination, bilinguisme,
+  tests/             154 tests pytest (API sur ChromaDB et PostgreSQL, parsing, PDF/docx/odt/html, anti-hallucination, bilinguisme,
                      traduction simulée, LLM simulé, bot)
 /data
   samples/           jeu de démo : chat du groupe, transcription de réunion, guide du fablab
@@ -325,19 +340,35 @@ multilingue (`EMBEDDING_BACKEND=sentence-transformers`, hors Vercel).
 
 ## Bilan
 
-**Ce qui fonctionne** (vérifié par 118 tests automatisés, dont toute la suite d'API sur ChromaDB **et** PostgreSQL, des appels HTTP réels et un test navigateur de l'interface) :
-ingestion txt/md/pdf avec métadonnées, découpage 300–500 mots, ChromaDB persistant, Q/R avec citations exactes
-(auteur, date, heure, extrait), refus honnête quand l'information manque, interface web complète,
-résumé + décisions + tâches, interface et réponses en français et en anglais, fonctionnement 100 % gratuit et hors ligne (hors téléchargement initial du modèle).
+**Ce qui fonctionne, vérifié en conditions réelles** (déploiement Vercel + Neon + Gemini) :
+- ingestion de vrais documents (dont un PDF de programme de 3 pages), mémoire **permanente** dans PostgreSQL/pgvector ;
+- questions/réponses avec **citation de la source exacte** (fichier, auteur, date, heure, extrait), en français et en anglais,
+  y compris une question en français sur un document en anglais ;
+- réponses rédigées par **Gemini** (offre gratuite, avec bascule automatique entre modèles quand un quota du jour est
+  épuisé), et **refus honnête** quand l'information n'existe pas (vérifié sur des questions hors sujet) ;
+- résumé d'un document ou d'une réunion, avec décisions et tâches (responsable, échéance) ;
+- **chatbot WhatsApp** : messages reçus et réponses envoyées sur un vrai téléphone ;
+- **chatbot Telegram** : webhook, menu de commandes et descriptions configurés automatiquement.
 
-**Bonus / non fini**
-- Chemin LLM (Anthropic / OpenAI / Ollama) : implémenté et testé avec un LLM simulé, **pas testé avec une vraie clé** dans cet environnement.
-- Bot Telegram : logique testée via l'API, **pas testé avec un vrai token**.
-- Les résumés sans LLM sont extractifs (phrases clés + motifs linguistiques) : utiles mais moins fluides qu'un résumé rédigé.
-- Le modèle d'embedding par défaut est surtout anglophone ; la recherche hybride (lexicale FR + IDF) compense
-  bien sur la démo, mais pour de gros corpus en français, préférer `sentence-transformers` multilingue.
+**Vérifié par 154 tests automatisés** : toute la suite d'API tourne sur ChromaDB **et** sur PostgreSQL ; les webhooks
+WhatsApp/Telegram sont testés avec des messages au format officiel ; les LLM, la traduction et les quotas sont simulés.
+
+**Limites connues**
+- WhatsApp utilise le **numéro de test de Meta** : seuls les numéros ajoutés comme destinataires (5 max.) reçoivent
+  une réponse, et le jeton d'accès temporaire expire au bout de 24 h. Pour ouvrir le bot à tous : enregistrer un vrai
+  numéro (carte SIM dédiée) et créer un jeton permanent (utilisateur système). Le site et Telegram sont ouverts à tous.
+- Le quota gratuit de Gemini est limité par jour : au-delà, les réponses passent en mode extractif (citations des
+  sources, sans rédaction) jusqu'à la remise à zéro du quota.
+- Sans LLM, les résumés sont extractifs (phrases clés + motifs linguistiques) : utiles, mais moins fluides.
+- Le modèle d'embedding par défaut est surtout anglophone ; la recherche hybride (lexicale FR/EN + IDF) et le lexique
+  bilingue compensent, mais pour de gros corpus multilingues un modèle `sentence-transformers` multilingue serait préférable.
 
 **Prochaines étapes possibles**
+- « **Qu'est-ce que j'ai manqué ?** » : résumé de rattrapage sur une période (depuis hier, cette semaine), toutes sources confondues.
+- **Priorisation** des informations (important / bon à savoir / discussion) et **détection des changements**
+  (« la date limite, d'abord vendredi, a été avancée à jeudi »).
+- Questions de suivi sur un résumé, et **tableau de bord admin** (questions fréquentes, questions sans réponse).
+- Vrai numéro WhatsApp (ouvert à tous) et indexation des documents envoyés directement au bot.
 - Connecteurs directs : export Telegram/WhatsApp automatique, Google Drive, transcription audio des réunions (Whisper local).
 - Filtres dans les questions (« cette semaine », « d'après la réunion du 15 ») via les métadonnées de date/type.
 - Authentification et espaces par groupe ; journal des questions sans réponse pour enrichir la FAQ.
